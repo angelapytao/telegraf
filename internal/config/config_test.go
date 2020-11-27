@@ -257,3 +257,31 @@ func TestConfig_BadOrdering(t *testing.T) {
 	require.Error(t, err, "bad ordering")
 	assert.Equal(t, "Error parsing ./testdata/non_slice_slice.toml, line 4: cannot unmarshal TOML array into string (need slice)", err.Error())
 }
+
+func TestConfig_BadPercision(t *testing.T) {
+	// #3444: when not using inline tables, care has to be taken so subsequent configuration
+	// doesn't become part of the table. This is not a bug, but TOML syntax.
+	c := NewConfig()
+	c.LoadConfig("./testdata/wrong_precision.toml")
+	t.Logf("Precision = %v \n", Precision(c))
+}
+
+func Precision(c *Config) time.Duration {
+	precision := c.Agent.Precision.Duration
+	interval := c.Agent.Interval.Duration
+
+	if precision > 0 {
+		return precision
+	}
+
+	switch {
+	case interval >= time.Second:
+		return time.Second
+	case interval >= time.Millisecond:
+		return time.Millisecond
+	case interval >= time.Microsecond:
+		return time.Microsecond
+	default:
+		return time.Nanosecond
+	}
+}
