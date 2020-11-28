@@ -5,13 +5,12 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Launch",
-            "type": "godlvdap",
+            "name": "Telegraf",
+            "type": "go",
             "request": "launch",
-            "mode": "auto",
-            "program": "${fileDirname}",
-            "env": {},
-            "args": ["--config=/Users/angelapytao/GolangProjects/telegraf/etc/telegraf-pro.conf"]
-        }
+            "mode": "debug",
+            "program": "/Users/angelapytao/GolangProjects/telegraf/cmd/telegraf",
+            "args": ["--config=/Users/angelapytao/GolangProjects/telegraf/etc/telegraf-dev.conf"]
+        },
     ]
 }
