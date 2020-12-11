@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/influxdata/telegraf"
+	"github.com/influxdata/telegraf/plugins/serializers/druid"
 	"github.com/influxdata/telegraf/plugins/serializers/json"
 	"github.com/influxdata/telegraf/plugins/serializers/nowmetric"
 )
@@ -56,6 +57,8 @@ func NewSerializer(config *Config) (Serializer, error) {
 	switch config.DataFormat {
 	case "json":
 		serializer, err = NewJsonSerializer(config.TimestampUnits)
+	case "druid":
+		serializer, err = NewDruidSerializer(config.TimestampUnits)
 	case "nowmetric":
 		serializer, err = NewNowSerializer()
 	default:
@@ -66,6 +69,10 @@ func NewSerializer(config *Config) (Serializer, error) {
 
 func NewJsonSerializer(timestampUnits time.Duration) (Serializer, error) {
 	return json.NewSerializer(timestampUnits)
+}
+
+func NewDruidSerializer(timestampUnits time.Duration) (Serializer, error) {
+	return druid.NewSerializer(timestampUnits)
 }
 
 func NewNowSerializer() (Serializer, error) {

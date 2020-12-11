@@ -49,11 +49,21 @@ func (s *serializer) SerializeBatch(metrics []telegraf.Metric) ([]byte, error) {
 
 func (s *serializer) createObject(metric telegraf.Metric) map[string]interface{} {
 	m := make(map[string]interface{}, 4)
-	m["tags"] = metric.Tags()
+	m["tags"] = s.convertTags2Array(metric.Tags())
 	m["fields"] = metric.Fields()
 	m["name"] = metric.Name()
 	m["timestamp"] = metric.Time().UnixNano() / int64(s.TimestampUnits)
 	return m
+}
+
+func (s *serializer) convertTags2Array(tags map[string]string) []interface{} {
+	res := make([]interface{}, len(tags))
+	i := 0
+	for _, tagValue := range tags {
+		res[i] = tagValue
+		i++
+	}
+	return res
 }
 
 func truncateDuration(units time.Duration) time.Duration {
