@@ -20,6 +20,7 @@ import (
 
 	"github.com/influxdata/telegraf"
 	"github.com/influxdata/telegraf/internal"
+	util "github.com/influxdata/telegraf/internal/config/frxs"
 	"github.com/influxdata/telegraf/internal/models"
 	"github.com/influxdata/telegraf/plugins/aggregators"
 	"github.com/influxdata/telegraf/plugins/inputs"
@@ -168,8 +169,9 @@ type AgentConfig struct {
 	// If set to -1, no archives are removed.
 	LogfileRotationMaxArchives int `toml:"logfile_rotation_max_archives"`
 
-	Hostname     string
-	OmitHostname bool
+	Hostname         string
+	OmitHostname     bool
+	UseLocalIPAsHost bool `toml:"use_localIp_as_host"`
 }
 
 // Inputs returns a list of strings of the configured inputs.
@@ -320,7 +322,7 @@ var agentConfig = `
   hostname = ""
   ## If set to true, do no set the "host" tag in the telegraf agent.
   omit_hostname = false
-
+  use_localIp_as_host = false
 `
 
 var outputHeader = `
@@ -719,8 +721,15 @@ func (c *Config) LoadConfig(path string) error {
 	}
 
 	if !c.Agent.OmitHostname {
-		if c.Agent.Hostname == "" {
+		if c.Agent.Hostname == "" && !c.Agent.UseLocalIPAsHost {
 			hostname, err := os.Hostname()
+			if err != nil {
+				return err
+			}
+
+			c.Agent.Hostname = hostname
+		} else { // auto get localhost ip as hostname
+			hostname, err := util.GetLocalIP()
 			if err != nil {
 				return err
 			}
