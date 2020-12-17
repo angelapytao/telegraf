@@ -729,7 +729,7 @@ func (c *Config) LoadConfig(path string) error {
 
 			c.Agent.Hostname = hostname
 		} else { // auto get localhost ip as hostname
-			hostname, err := util.GetLocalIP()
+			hostname, err := util.GetAvaliableLocalIP()
 			if err != nil {
 				return err
 			}
