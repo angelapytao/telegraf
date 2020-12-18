@@ -728,7 +728,7 @@ func (c *Config) LoadConfig(path string) error {
 			}
 
 			c.Agent.Hostname = hostname
-		} else { // auto get localhost ip as hostname
+		} else if c.Agent.UseLocalIPAsHost { // auto get localhost ip as hostname
 			hostname, err := util.GetAvaliableLocalIP()
 			if err != nil {
 				return err
