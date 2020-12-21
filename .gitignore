@@ -3,6 +3,4 @@
 /telegraf.exe
 /telegraf.gz
 /vendor
-/etc/telegraf-dev.conf
-/etc/telegraf-pro.conf
-/etc/telegraf-pro-new.conf
+/etc/telegraf*.conf
