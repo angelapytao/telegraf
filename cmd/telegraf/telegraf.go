@@ -70,7 +70,7 @@ var fPlugins = flag.String("plugin-directory", "",
 	"path to directory containing external plugins")
 
 var (
-	version string
+	version = "fd-1.0.0"
 	commit  string
 	branch  string
 )

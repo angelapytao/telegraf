@@ -10,7 +10,7 @@
             "request": "launch",
             "mode": "debug",
             "program": "/Users/angelapytao/GolangProjects/telegraf/cmd/telegraf",
-            "args": ["--config=/Users/angelapytao/GolangProjects/telegraf/etc/telegraf-dev.conf"]
+            "args": ["--config=/Users/angelapytao/GolangProjects/telegraf/etc/telegraf-dev-local.conf"]
         },
     ]
 }

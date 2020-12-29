@@ -13,7 +13,6 @@ import (
 	_ "github.com/influxdata/telegraf/plugins/inputs/nstat"
 	_ "github.com/influxdata/telegraf/plugins/inputs/processes"
 	_ "github.com/influxdata/telegraf/plugins/inputs/procstat"
-	_ "github.com/influxdata/telegraf/plugins/inputs/smart"
 	_ "github.com/influxdata/telegraf/plugins/inputs/syslog"
 	_ "github.com/influxdata/telegraf/plugins/inputs/sysstat"
 	_ "github.com/influxdata/telegraf/plugins/inputs/system"
