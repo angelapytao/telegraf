@@ -1,4 +1,4 @@
-package procstat
+package procstat2
 
 import (
 	"fmt"

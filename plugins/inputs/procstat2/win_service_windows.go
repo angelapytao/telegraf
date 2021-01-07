@@ -1,6 +1,6 @@
 // +build windows
 
-package procstat
+package procstat2
 
 import (
 	"unsafe"

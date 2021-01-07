@@ -1,4 +1,4 @@
-package procstat
+package procstat2
 
 import (
 	"bytes"
@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/influxdata/telegraf"
@@ -20,8 +21,9 @@ var (
 )
 
 type PID int32
+type PORT int32
 
-type Procstat struct {
+type Procstat2 struct {
 	PidFinder   string `toml:"pid_finder"`
 	PidFile     string `toml:"pid_file"`
 	Exe         string
@@ -32,6 +34,8 @@ type Procstat struct {
 	User        string
 	SystemdUnit string
 	CGroup      string `toml:"cgroup"`
+	CommandLine string `toml:"command_line"`
+	Ports       string `toml:"listen_ports"`
 	PidTag      bool
 	WinService  string `toml:"win_service"`
 
@@ -55,6 +59,10 @@ var sampleConfig = `
   # systemd_unit = "nginx.service"
   ## CGroup name or path
   # cgroup = "systemd/system.slice/nginx.service"
+  ## shell command 
+  command_line = ""
+  ## The listening port number of the process
+  listen_ports ="80,8082"
 
   ## Windows service name
   # win_service = ""
@@ -81,15 +89,15 @@ var sampleConfig = `
   # pid_finder = "pgrep"
 `
 
-func (_ *Procstat) SampleConfig() string {
+func (_ *Procstat2) SampleConfig() string {
 	return sampleConfig
 }
 
-func (_ *Procstat) Description() string {
+func (_ *Procstat2) Description() string {
 	return "Monitor process cpu and memory usage"
 }
 
-func (p *Procstat) Gather(acc telegraf.Accumulator) error {
+func (p *Procstat2) Gather(acc telegraf.Accumulator) error {
 	if p.createPIDFinder == nil {
 		switch p.PidFinder {
 		case "native":
@@ -117,13 +125,13 @@ func (p *Procstat) Gather(acc telegraf.Accumulator) error {
 			"pid_finder": p.PidFinder,
 			"result":     "lookup_error",
 		}
-		acc.AddFields("procstat_lookup", fields, tags)
+		acc.AddFields("procstat2_lookup", fields, tags)
 		return err
 	}
 
 	procs, err := p.updateProcesses(pids, tags, p.procs)
 	if err != nil {
-		acc.AddError(fmt.Errorf("E! Error: procstat getting process, exe: [%s] pidfile: [%s] pattern: [%s] user: [%s] %s",
+		acc.AddError(fmt.Errorf("E! Error: procstat2 getting process, exe: [%s] pidfile: [%s] pattern: [%s] user: [%s] %s",
 			p.Exe, p.PidFile, p.Pattern, p.User, err.Error()))
 	}
 	p.procs = procs
@@ -139,13 +147,13 @@ func (p *Procstat) Gather(acc telegraf.Accumulator) error {
 	}
 	tags["pid_finder"] = p.PidFinder
 	tags["result"] = "success"
-	acc.AddFields("procstat_lookup", fields, tags)
+	acc.AddFields("procstat2_lookup", fields, tags)
 
 	return nil
 }
 
 // Add metrics a single Process
-func (p *Procstat) addMetric(proc Process, acc telegraf.Accumulator) {
+func (p *Procstat2) addMetric(proc Process, acc telegraf.Accumulator) {
 	var prefix string
 	if p.Prefix != "" {
 		prefix = p.Prefix + "_"
@@ -294,11 +302,11 @@ func (p *Procstat) addMetric(proc Process, acc telegraf.Accumulator) {
 		}
 	}
 
-	acc.AddFields("procstat", fields, proc.Tags())
+	acc.AddFields("procstat2", fields, proc.Tags())
 }
 
 // Update monitored Processes
-func (p *Procstat) updateProcesses(pids []PID, tags map[string]string, prevInfo map[PID]Process) (map[PID]Process, error) {
+func (p *Procstat2) updateProcesses(pids []PID, tags map[string]string, prevInfo map[PID]Process) (map[PID]Process, error) {
 	procs := make(map[PID]Process, len(prevInfo))
 
 	for _, pid := range pids {
@@ -339,7 +347,7 @@ func (p *Procstat) updateProcesses(pids []PID, tags map[string]string, prevInfo 
 }
 
 // Create and return PIDGatherer lazily
-func (p *Procstat) getPIDFinder() (PIDFinder, error) {
+func (p *Procstat2) getPIDFinder() (PIDFinder, error) {
 	if p.finder == nil {
 		f, err := p.createPIDFinder()
 		if err != nil {
@@ -351,7 +359,7 @@ func (p *Procstat) getPIDFinder() (PIDFinder, error) {
 }
 
 // Get matching PIDs and their initial tags
-func (p *Procstat) findPids(acc telegraf.Accumulator) ([]PID, map[string]string, error) {
+func (p *Procstat2) findPids(acc telegraf.Accumulator) ([]PID, map[string]string, error) {
 	var pids []PID
 	tags := make(map[string]string)
 	var err error
@@ -376,12 +384,12 @@ func (p *Procstat) findPids(acc telegraf.Accumulator) ([]PID, map[string]string,
 	} else if p.SystemdUnit != "" {
 		pids, err = p.systemdUnitPIDs()
 		tags = map[string]string{"systemd_unit": p.SystemdUnit}
+	} else if p.CommandLine != "" {
+		pids, err = p.netstatPIDS()
+		tags = map[string]string{"cmd_line": p.CommandLine}
 	} else if p.CGroup != "" {
 		pids, err = p.cgroupPIDs()
 		tags = map[string]string{"cgroup": p.CGroup}
-	} else if p.WinService != "" {
-		pids, err = p.winServicePIDs()
-		tags = map[string]string{"win_service": p.WinService}
 	} else {
 		err = fmt.Errorf("Either exe, pid_file, user, pattern, systemd_unit, cgroup, or win_service must be specified")
 	}
@@ -392,7 +400,7 @@ func (p *Procstat) findPids(acc telegraf.Accumulator) ([]PID, map[string]string,
 // execCommand is so tests can mock out exec.Command usage.
 var execCommand = exec.Command
 
-func (p *Procstat) systemdUnitPIDs() ([]PID, error) {
+func (p *Procstat2) systemdUnitPIDs() ([]PID, error) {
 	var pids []PID
 	cmd := execCommand("systemctl", "show", p.SystemdUnit)
 	out, err := cmd.Output()
@@ -419,7 +427,7 @@ func (p *Procstat) systemdUnitPIDs() ([]PID, error) {
 	return pids, nil
 }
 
-func (p *Procstat) cgroupPIDs() ([]PID, error) {
+func (p *Procstat2) cgroupPIDs() ([]PID, error) {
 	var pids []PID
 
 	procsPath := p.CGroup
@@ -445,21 +453,35 @@ func (p *Procstat) cgroupPIDs() ([]PID, error) {
 	return pids, nil
 }
 
-func (p *Procstat) winServicePIDs() ([]PID, error) {
-	var pids []PID
-
-	pid, err := queryPidWithWinServiceName(p.WinService)
+// netstatPIDS use shell exec "netstat -anvp tcp|grep %d |awk '{print $9}'"
+func (p *Procstat2) netstatPIDS() ([]PID, error) {
+	path, err := exec.LookPath("/bin/sh")
 	if err != nil {
-		return pids, err
+		return nil, fmt.Errorf("Could not find /bin/sh binary: %s", err)
 	}
 
-	pids = append(pids, PID(pid))
+	cmdLine := p.CommandLine
+	pids := []PID{}
+
+	ports := strings.Split(p.Ports, "-")
+	for _, p := range ports {
+		portId, _ := strconv.Atoi(p)
+		cmd := fmt.Sprintf(cmdLine, portId)
+		args := []string{"-c", cmd}
+
+		ids, err := find(path, args)
+		if err != nil {
+			return nil, fmt.Errorf("Could not find pids by: [%s], err: %v", cmdLine, err)
+		}
+
+		pids = append(pids, ids...)
+	}
 
 	return pids, nil
 }
 
 func init() {
-	inputs.Add("procstat", func() telegraf.Input {
-		return &Procstat{}
+	inputs.Add("procstat2", func() telegraf.Input {
+		return &Procstat2{}
 	})
 }

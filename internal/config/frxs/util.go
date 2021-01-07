@@ -1,12 +1,11 @@
 package util
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"net"
 	"os/exec"
-	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -67,24 +66,58 @@ func GetAvaliableLocalIP() (ipv4 string, err error) {
 	return
 }
 
+func runInWindows(cmd string) (string, error) {
+	result, err := exec.Command("cmd", "/c", cmd).Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(result)), err
+}
+
+func RunCommand(cmd string) (string, error) {
+	if runtime.GOOS == "windows" {
+		return runInWindows(cmd)
+	} else {
+		return runInLinux(cmd)
+	}
+}
+
+func runInLinux(cmd string) (string, error) {
+	fmt.Println("Running Linux cmd:" + cmd)
+	result, err := exec.Command("/bin/sh", "-c", cmd).Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(result)), err
+}
+
+// 根据进程名判断进程是否运行
+func CheckProRunning(serverName string) (bool, error) {
+	a := `ps ux | awk '/` + serverName + `/ && !/awk/ {print $2}'`
+	pid, err := RunCommand(a)
+	if err != nil {
+		return false, err
+	}
+	return pid != "", nil
+}
+
+// 根据进程名称获取进程ID
+func GetPid(serverName string) (string, error) {
+	a := `ps ux | awk '/` + serverName + `/ && !/awk/ {print $2}'`
+	pid, err := RunCommand(a)
+	return pid, err
+}
+
 // 传入查询的端口号
 // 返回端口号对应的进程PID，若没有找到相关进程，返回-1
-func PortInUse(portNumber int) int {
-	res := -1
-	var outBytes bytes.Buffer
-	cmdStr := fmt.Sprintf("netstat -ano -p tcp | findstr %d", portNumber)
-	cmd := exec.Command("cmd", "/c", cmdStr)
-	cmd.Stdout = &outBytes
-	cmd.Run()
-	resStr := outBytes.String()
-	r := regexp.MustCompile(`\s\d+\s`).FindAllString(resStr, -1)
-	if len(r) > 0 {
-		pid, err := strconv.Atoi(strings.TrimSpace(r[0]))
-		if err != nil {
-			res = -1
-		} else {
-			res = pid
-		}
+func GetPidByPort(portNumber int) int {
+	cmdStr := fmt.Sprintf("netstat -anvp tcp|grep %d |awk '{print $9}'", portNumber) // mac
+	// cmdStr := fmt.Sprintf("netstat -anp|grep 45388|awk '{print $7}'|awk -F '/' '{print $1}'", portNumber) // linux
+	pid, err := RunCommand(cmdStr)
+	if err != nil {
+		return -1
 	}
-	return res
+
+	processId, _ := strconv.Atoi(pid)
+	return processId
 }

@@ -1,4 +1,4 @@
-package procstat
+package procstat2
 
 import (
 	"fmt"
@@ -61,6 +61,11 @@ ExecMainPID=11408
 type testPgrep struct {
 	pids []PID
 	err  error
+}
+
+type testNetstat struct {
+	ports []PORT
+	err   error
 }
 
 func pidFinder(pids []PID, err error) func() (PIDFinder, error) {
@@ -165,12 +170,13 @@ func (p *testProc) RlimitUsage(gatherUsage bool) ([]process.RlimitStat, error) {
 }
 
 var pid PID = PID(42)
+var port PORT = PORT(3000)
 var exe string = "foo"
 
 func TestGather_CreateProcessErrorOk(t *testing.T) {
 	var acc testutil.Accumulator
 
-	p := Procstat{
+	p := Procstat2{
 		Exe:             exe,
 		createPIDFinder: pidFinder([]PID{pid}, nil),
 		createProcess: func(PID) (Process, error) {
@@ -183,7 +189,7 @@ func TestGather_CreateProcessErrorOk(t *testing.T) {
 func TestGather_CreatePIDFinderError(t *testing.T) {
 	var acc testutil.Accumulator
 
-	p := Procstat{
+	p := Procstat2{
 		createPIDFinder: func() (PIDFinder, error) {
 			return nil, fmt.Errorf("createPIDFinder error")
 		},
@@ -195,7 +201,7 @@ func TestGather_CreatePIDFinderError(t *testing.T) {
 func TestGather_ProcessName(t *testing.T) {
 	var acc testutil.Accumulator
 
-	p := Procstat{
+	p := Procstat2{
 		Exe:             exe,
 		ProcessName:     "custom_name",
 		createPIDFinder: pidFinder([]PID{pid}, nil),
@@ -203,108 +209,108 @@ func TestGather_ProcessName(t *testing.T) {
 	}
 	require.NoError(t, acc.GatherError(p.Gather))
 
-	assert.Equal(t, "custom_name", acc.TagValue("procstat", "process_name"))
+	assert.Equal(t, "custom_name", acc.TagValue("procstat2", "process_name"))
 }
 
 func TestGather_NoProcessNameUsesReal(t *testing.T) {
 	var acc testutil.Accumulator
 	pid := PID(os.Getpid())
 
-	p := Procstat{
+	p := Procstat2{
 		Exe:             exe,
 		createPIDFinder: pidFinder([]PID{pid}, nil),
 		createProcess:   newTestProc,
 	}
 	require.NoError(t, acc.GatherError(p.Gather))
 
-	assert.True(t, acc.HasTag("procstat", "process_name"))
+	assert.True(t, acc.HasTag("procstat2", "process_name"))
 }
 
 func TestGather_NoPidTag(t *testing.T) {
 	var acc testutil.Accumulator
 
-	p := Procstat{
+	p := Procstat2{
 		Exe:             exe,
 		createPIDFinder: pidFinder([]PID{pid}, nil),
 		createProcess:   newTestProc,
 	}
 	require.NoError(t, acc.GatherError(p.Gather))
-	assert.True(t, acc.HasInt32Field("procstat", "pid"))
-	assert.False(t, acc.HasTag("procstat", "pid"))
+	assert.True(t, acc.HasInt32Field("procstat2", "pid"))
+	assert.False(t, acc.HasTag("procstat2", "pid"))
 }
 
 func TestGather_PidTag(t *testing.T) {
 	var acc testutil.Accumulator
 
-	p := Procstat{
+	p := Procstat2{
 		Exe:             exe,
 		PidTag:          true,
 		createPIDFinder: pidFinder([]PID{pid}, nil),
 		createProcess:   newTestProc,
 	}
 	require.NoError(t, acc.GatherError(p.Gather))
-	assert.Equal(t, "42", acc.TagValue("procstat", "pid"))
-	assert.False(t, acc.HasInt32Field("procstat", "pid"))
+	assert.Equal(t, "42", acc.TagValue("procstat2", "pid"))
+	assert.False(t, acc.HasInt32Field("procstat2", "pid"))
 }
 
 func TestGather_Prefix(t *testing.T) {
 	var acc testutil.Accumulator
 
-	p := Procstat{
+	p := Procstat2{
 		Exe:             exe,
 		Prefix:          "custom_prefix",
 		createPIDFinder: pidFinder([]PID{pid}, nil),
 		createProcess:   newTestProc,
 	}
 	require.NoError(t, acc.GatherError(p.Gather))
-	assert.True(t, acc.HasInt32Field("procstat", "custom_prefix_num_fds"))
+	assert.True(t, acc.HasInt32Field("procstat2", "custom_prefix_num_fds"))
 }
 
 func TestGather_Exe(t *testing.T) {
 	var acc testutil.Accumulator
 
-	p := Procstat{
+	p := Procstat2{
 		Exe:             exe,
 		createPIDFinder: pidFinder([]PID{pid}, nil),
 		createProcess:   newTestProc,
 	}
 	require.NoError(t, acc.GatherError(p.Gather))
 
-	assert.Equal(t, exe, acc.TagValue("procstat", "exe"))
+	assert.Equal(t, exe, acc.TagValue("procstat2", "exe"))
 }
 
 func TestGather_User(t *testing.T) {
 	var acc testutil.Accumulator
 	user := "ada"
 
-	p := Procstat{
+	p := Procstat2{
 		User:            user,
 		createPIDFinder: pidFinder([]PID{pid}, nil),
 		createProcess:   newTestProc,
 	}
 	require.NoError(t, acc.GatherError(p.Gather))
 
-	assert.Equal(t, user, acc.TagValue("procstat", "user"))
+	assert.Equal(t, user, acc.TagValue("procstat2", "user"))
 }
 
 func TestGather_Pattern(t *testing.T) {
 	var acc testutil.Accumulator
 	pattern := "foo"
 
-	p := Procstat{
+	p := Procstat2{
 		Pattern:         pattern,
 		createPIDFinder: pidFinder([]PID{pid}, nil),
 		createProcess:   newTestProc,
 	}
 	require.NoError(t, acc.GatherError(p.Gather))
 
-	assert.Equal(t, pattern, acc.TagValue("procstat", "pattern"))
+	assert.Equal(t, pattern, acc.TagValue("procstat2", "pattern"))
 }
 
 func TestGather_MissingPidMethod(t *testing.T) {
 	var acc testutil.Accumulator
 
-	p := Procstat{
+	p := Procstat2{
 		createPIDFinder: pidFinder([]PID{pid}, nil),
 		createProcess:   newTestProc,
 	}
@@ -315,21 +321,21 @@ func TestGather_PidFile(t *testing.T) {
 	var acc testutil.Accumulator
 	pidfile := "/path/to/pidfile"
 
-	p := Procstat{
+	p := Procstat2{
 		PidFile:         pidfile,
 		createPIDFinder: pidFinder([]PID{pid}, nil),
 		createProcess:   newTestProc,
 	}
 	require.NoError(t, acc.GatherError(p.Gather))
 
-	assert.Equal(t, pidfile, acc.TagValue("procstat", "pidfile"))
+	assert.Equal(t, pidfile, acc.TagValue("procstat2", "pidfile"))
 }
 
 func TestGather_PercentFirstPass(t *testing.T) {
 	var acc testutil.Accumulator
 	pid := PID(os.Getpid())
 
-	p := Procstat{
+	p := Procstat2{
 		Pattern:         "foo",
 		PidTag:          true,
 		createPIDFinder: pidFinder([]PID{pid}, nil),
@@ -337,15 +343,15 @@ func TestGather_PercentFirstPass(t *testing.T) {
 	}
 	require.NoError(t, acc.GatherError(p.Gather))
 
-	assert.True(t, acc.HasFloatField("procstat", "cpu_time_user"))
-	assert.False(t, acc.HasFloatField("procstat", "cpu_usage"))
+	assert.True(t, acc.HasFloatField("procstat2", "cpu_time_user"))
+	assert.False(t, acc.HasFloatField("procstat2", "cpu_usage"))
 }
 
 func TestGather_PercentSecondPass(t *testing.T) {
 	var acc testutil.Accumulator
 	pid := PID(os.Getpid())
 
-	p := Procstat{
+	p := Procstat2{
 		Pattern:         "foo",
 		PidTag:          true,
 		createPIDFinder: pidFinder([]PID{pid}, nil),
@@ -354,12 +360,12 @@ func TestGather_PercentSecondPass(t *testing.T) {
 	require.NoError(t, acc.GatherError(p.Gather))
 	require.NoError(t, acc.GatherError(p.Gather))
 
-	assert.True(t, acc.HasFloatField("procstat", "cpu_time_user"))
-	assert.True(t, acc.HasFloatField("procstat", "cpu_usage"))
+	assert.True(t, acc.HasFloatField("procstat2", "cpu_time_user"))
+	assert.True(t, acc.HasFloatField("procstat2", "cpu_usage"))
 }
 
 func TestGather_systemdUnitPIDs(t *testing.T) {
-	p := Procstat{
+	p := Procstat2{
 		createPIDFinder: pidFinder([]PID{}, nil),
 		SystemdUnit:     "TestGather_systemdUnitPIDs",
 	}
@@ -381,7 +387,7 @@ func TestGather_cgroupPIDs(t *testing.T) {
 	err = ioutil.WriteFile(filepath.Join(td, "cgroup.procs"), []byte("1234\n5678\n"), 0644)
 	require.NoError(t, err)
 
-	p := Procstat{
+	p := Procstat2{
 		createPIDFinder: pidFinder([]PID{}, nil),
 		CGroup:          td,
 	}
@@ -392,8 +398,8 @@ func TestGather_cgroupPIDs(t *testing.T) {
 	assert.Equal(t, td, tags["cgroup"])
 }
 
-func TestProcstatLookupMetric(t *testing.T) {
-	p := Procstat{
+func TestProcstat2LookupMetric(t *testing.T) {
+	p := Procstat2{
 		createPIDFinder: pidFinder([]PID{543}, nil),
 		Exe:             "-Gsys",
 	}
@@ -401,4 +407,17 @@ func TestProcstatLookupMetric(t *testing.T) {
 	err := acc.GatherError(p.Gather)
 	require.NoError(t, err)
 	require.Equal(t, len(p.procs)+1, len(acc.Metrics))
+}
+
+func TestGather_CommandLine(t *testing.T) {
+	p := Procstat2{
+		createPIDFinder: pidFinder([]PID{}, nil),
+		CommandLine:     "netstat -anvp tcp|grep %d |awk '{print $9}'",
+		Ports:           "3000",
+	}
+	var acc testutil.Accumulator
+	pids, tags, err := p.findPids(&acc)
+	require.NoError(t, err)
+	assert.Equal(t, []PID{63904}, pids)
+	assert.Equal(t, "netstat -anvp tcp|grep %d |awk '{print $9}'", tags["cmd_line"])
 }

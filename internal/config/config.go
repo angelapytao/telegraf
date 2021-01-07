@@ -172,6 +172,8 @@ type AgentConfig struct {
 	Hostname         string
 	OmitHostname     bool
 	UseLocalIPAsHost bool `toml:"use_localIp_as_host"`
+
+	Command string `toml:"command"`
 }
 
 // Inputs returns a list of strings of the configured inputs.
@@ -323,6 +325,8 @@ var agentConfig = `
   ## If set to true, do no set the "host" tag in the telegraf agent.
   omit_hostname = false
   use_localIp_as_host = false
+
+  command = "netstat -anvp tcp|grep %d |awk '{print $9}'"
 `
 
 var outputHeader = `
