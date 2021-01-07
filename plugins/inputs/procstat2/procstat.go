@@ -34,8 +34,9 @@ type Procstat2 struct {
 	User        string
 	SystemdUnit string
 	CGroup      string `toml:"cgroup"`
-	CommandLine string `toml:"command_line"`
+	ExecLine    string `toml:"exec_line"`
 	Ports       string `toml:"listen_ports"`
+	PortTag     bool
 	PidTag      bool
 	WinService  string `toml:"win_service"`
 
@@ -43,6 +44,7 @@ type Procstat2 struct {
 
 	createPIDFinder func() (PIDFinder, error)
 	procs           map[PID]Process
+	listenPortProcs map[PID]string
 	createProcess   func(PID) (Process, error)
 }
 
@@ -60,7 +62,7 @@ var sampleConfig = `
   ## CGroup name or path
   # cgroup = "systemd/system.slice/nginx.service"
   ## shell command 
-  command_line = ""
+  exec_line = ""
   ## The listening port number of the process
   listen_ports ="80,8082"
 
@@ -190,6 +192,11 @@ func (p *Procstat2) addMetric(proc Process, acc telegraf.Accumulator) {
 				proc.Tags()["cmdline"] = Cmdline
 			}
 		}
+	}
+
+	//If command_line is not empty, tag is true and it is not already set add port number as a tag
+	if p.PortTag {
+		proc.Tags()["port"] = p.listenPortProcs[proc.PID()]
 	}
 
 	numThreads, err := proc.NumThreads()
@@ -341,6 +348,10 @@ func (p *Procstat2) updateProcesses(pids []PID, tags map[string]string, prevInfo
 			if p.ProcessName != "" {
 				proc.Tags()["process_name"] = p.ProcessName
 			}
+			// add port tag if needed
+			if p.PortTag {
+				proc.Tags()["port"] = p.listenPortProcs[pid]
+			}
 		}
 	}
 	return procs, nil
@@ -384,9 +395,11 @@ func (p *Procstat2) findPids(acc telegraf.Accumulator) ([]PID, map[string]string
 	} else if p.SystemdUnit != "" {
 		pids, err = p.systemdUnitPIDs()
 		tags = map[string]string{"systemd_unit": p.SystemdUnit}
-	} else if p.CommandLine != "" {
+	} else if p.ExecLine != "" {
 		pids, err = p.netstatPIDS()
-		tags = map[string]string{"cmd_line": p.CommandLine}
+		p.PidFinder = "shell_exec"
+		p.PortTag = true
+		tags = map[string]string{"exec_line": p.ExecLine}
 	} else if p.CGroup != "" {
 		pids, err = p.cgroupPIDs()
 		tags = map[string]string{"cgroup": p.CGroup}
@@ -453,30 +466,39 @@ func (p *Procstat2) cgroupPIDs() ([]PID, error) {
 	return pids, nil
 }
 
-// netstatPIDS use shell exec "netstat -anvp tcp|grep %d |awk '{print $9}'"
+// netstatPIDS use shell exec
+// "netstat -anvp tcp|grep LISTEN|grep '\\<%s\\>' |awk '{print $9}'"
+// to find pid
 func (p *Procstat2) netstatPIDS() ([]PID, error) {
 	path, err := exec.LookPath("/bin/sh")
 	if err != nil {
 		return nil, fmt.Errorf("Could not find /bin/sh binary: %s", err)
 	}
 
-	cmdLine := p.CommandLine
+	cmdLine := p.ExecLine
 	pids := []PID{}
 
-	ports := strings.Split(p.Ports, "-")
-	for _, p := range ports {
-		portId, _ := strconv.Atoi(p)
-		cmd := fmt.Sprintf(cmdLine, portId)
+	ports := strings.Split(p.Ports, ",")
+	proc2port := make(map[PID]string, len(ports))
+	for _, port := range ports {
+		cmd := fmt.Sprintf(cmdLine, port)
 		args := []string{"-c", cmd}
 
 		ids, err := find(path, args)
-		if err != nil {
-			return nil, fmt.Errorf("Could not find pids by: [%s], err: %v", cmdLine, err)
+		if err != nil || len(ids) < 1 {
+			return nil, fmt.Errorf("Could not find pid by: [%s], len: %d, err: %v", cmd, len(ids), err)
 		}
 
+		if len(ids) > 1 {
+			fmt.Printf("find more than one pid by: [%s], pids: %v, err: %v \n", cmd, ids, err)
+			continue
+		}
+
+		proc2port[ids[0]] = port
 		pids = append(pids, ids...)
 	}
 
+	p.listenPortProcs = proc2port
 	return pids, nil
 }
 

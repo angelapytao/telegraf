@@ -412,8 +412,8 @@ func TestProcstat2LookupMetric(t *testing.T) {
 func TestGather_CommandLine(t *testing.T) {
 	p := Procstat2{
 		createPIDFinder: pidFinder([]PID{}, nil),
-		CommandLine:     "netstat -anvp tcp|grep %d |awk '{print $9}'",
-		Ports:           "3000",
+		ExecLine:        "netstat -anvp tcp|grep LISTEN|grep '\\<%s\\>' |awk '{print $9}'",
+		Ports:           "3000,3306",
 	}
 	var acc testutil.Accumulator
 	pids, tags, err := p.findPids(&acc)
