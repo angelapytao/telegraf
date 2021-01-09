@@ -1,4 +1,4 @@
-package exec
+package exec2
 
 import (
 	"bytes"
@@ -26,6 +26,11 @@ const sampleConfig = `
     "/tmp/collect_*.sh"
   ]
 
+  ## pattern as argument for netstat find pid (ie, "netstat -anvp tcp|grep LISTEN|grep '\\<%s\\>' |awk '{print $9}'")
+  pattern = "netstat -anvp tcp|grep LISTEN|grep '\\<%s\\>' |awk '{print $9}'"
+  ## The listening port number of the process
+  listen_ports ="80,8082"
+  
   ## Timeout for each command to complete.
   timeout = "5s"
 
@@ -41,10 +46,15 @@ const sampleConfig = `
 
 const MaxStderrBytes = 512
 
-type Exec struct {
+type Exec2 struct {
 	Commands []string
 	Command  string
-	Timeout  internal.Duration
+
+	Pattern string
+	Ports   string            `toml:"listen_ports"`
+	cmds    map[string]string //<cmd, port>
+
+	Timeout internal.Duration
 
 	parser parsers.Parser
 
@@ -52,8 +62,8 @@ type Exec struct {
 	Log    telegraf.Logger `toml:"-"`
 }
 
-func NewExec() *Exec {
-	return &Exec{
+func NewExec2() *Exec2 {
+	return &Exec2{
 		runner:  CommandRunner{},
 		Timeout: internal.Duration{Duration: time.Second * 5},
 	}
@@ -71,7 +81,7 @@ func (c CommandRunner) Run(
 ) ([]byte, []byte, error) {
 	split_cmd, err := shellquote.Split(command)
 	if err != nil || len(split_cmd) == 0 {
-		return nil, nil, fmt.Errorf("exec: unable to parse command, %s", err)
+		return nil, nil, fmt.Errorf("exec2: unable to parse command, %s", err)
 	}
 
 	cmd := exec.Command(split_cmd[0], split_cmd[1:]...)
@@ -140,13 +150,13 @@ func removeCarriageReturns(b bytes.Buffer) bytes.Buffer {
 
 }
 
-func (e *Exec) ProcessCommand(command string, acc telegraf.Accumulator, wg *sync.WaitGroup) {
+func (e *Exec2) ProcessCommand(command string, acc telegraf.Accumulator, wg *sync.WaitGroup) {
 	defer wg.Done()
 	_, isNagios := e.parser.(*nagios.NagiosParser)
 
 	out, errbuf, runErr := e.runner.Run(command, e.Timeout.Duration)
 	if !isNagios && runErr != nil {
-		err := fmt.Errorf("exec: %s for command '%s': %s", runErr, command, string(errbuf))
+		err := fmt.Errorf("exec2: %s for command '%s': %s", runErr, command, string(errbuf))
 		acc.AddError(err)
 		return
 	}
@@ -165,23 +175,32 @@ func (e *Exec) ProcessCommand(command string, acc telegraf.Accumulator, wg *sync
 	}
 
 	for _, m := range metrics {
-		acc.AddMetric(m)
+		e.addMetric(command, m, acc)
 	}
 }
 
-func (e *Exec) SampleConfig() string {
+func (e *Exec2) addMetric(command string, metric telegraf.Metric, acc telegraf.Accumulator) {
+	// add port tag support
+	if port, ok := e.cmds[command]; ok {
+		metric.AddTag("port", port)
+	}
+
+	acc.AddMetric(metric)
+}
+
+func (e *Exec2) SampleConfig() string {
 	return sampleConfig
 }
 
-func (e *Exec) Description() string {
+func (e *Exec2) Description() string {
 	return "Read metrics from one or more commands that can output to stdout"
 }
 
-func (e *Exec) SetParser(parser parsers.Parser) {
+func (e *Exec2) SetParser(parser parsers.Parser) {
 	e.parser = parser
 }
 
-func (e *Exec) Gather(acc telegraf.Accumulator) error {
+func (e *Exec2) Gather(acc telegraf.Accumulator) error {
 	var wg sync.WaitGroup
 	// Legacy single command support
 	if e.Command != "" {
@@ -228,12 +247,30 @@ func (e *Exec) Gather(acc telegraf.Accumulator) error {
 	return nil
 }
 
-func (e *Exec) Init() error {
+// addPatternCommands parse ports generate multi command by the specified pattern
+func (e *Exec2) addPatternCommands() {
+	if e.Pattern != "" && e.Ports != "" {
+		ports := strings.Split(e.Ports, ",")
+		commands := make([]string, 0, len(ports))
+		e.cmds = make(map[string]string, len(ports))
+		for _, port := range ports {
+			cmd := fmt.Sprintf(e.Pattern, port)
+			e.cmds[cmd] = port
+			commands = append(commands, cmd)
+		}
+
+		e.Commands = append(e.Commands, commands...)
+	}
+}
+
+func (e *Exec2) Init() error {
+	// Legacy pattern command support
+	e.addPatternCommands()
 	return nil
 }
 
 func init() {
-	inputs.Add("exec", func() telegraf.Input {
-		return NewExec()
+	inputs.Add("exec2", func() telegraf.Input {
+		return NewExec2()
 	})
 }

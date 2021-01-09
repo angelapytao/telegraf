@@ -61,7 +61,7 @@ var sampleConfig = `
   # systemd_unit = "nginx.service"
   ## CGroup name or path
   # cgroup = "systemd/system.slice/nginx.service"
-  ## shell command 
+  ## shell command line
   exec_line = ""
   ## The listening port number of the process
   listen_ports ="80,8082"
@@ -192,11 +192,6 @@ func (p *Procstat2) addMetric(proc Process, acc telegraf.Accumulator) {
 				proc.Tags()["cmdline"] = Cmdline
 			}
 		}
-	}
-
-	//If command_line is not empty, tag is true and it is not already set add port number as a tag
-	if p.PortTag {
-		proc.Tags()["port"] = p.listenPortProcs[proc.PID()]
 	}
 
 	numThreads, err := proc.NumThreads()

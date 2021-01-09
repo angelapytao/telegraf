@@ -1,4 +1,4 @@
-package exec
+package exec2
 
 import (
 	"bytes"
@@ -12,9 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// Midnight 9/22/2015
-const baseTimeSeconds = 1442905200
 
 const validJson = `
 {
@@ -33,20 +30,6 @@ const validJson = `
 const malformedJson = `
 {
     "status": "green",
-`
-
-const lineProtocol = "cpu,host=foo,datacenter=us-east usage_idle=99,usage_busy=1\n"
-const lineProtocolEmpty = ""
-const lineProtocolShort = "ab"
-
-const lineProtocolMulti = `
-cpu,cpu=cpu0,host=foo,datacenter=us-east usage_idle=99,usage_busy=1
-cpu,cpu=cpu1,host=foo,datacenter=us-east usage_idle=99,usage_busy=1
-cpu,cpu=cpu2,host=foo,datacenter=us-east usage_idle=99,usage_busy=1
-cpu,cpu=cpu3,host=foo,datacenter=us-east usage_idle=99,usage_busy=1
-cpu,cpu=cpu4,host=foo,datacenter=us-east usage_idle=99,usage_busy=1
-cpu,cpu=cpu5,host=foo,datacenter=us-east usage_idle=99,usage_busy=1
-cpu,cpu=cpu6,host=foo,datacenter=us-east usage_idle=99,usage_busy=1
 `
 
 type CarriageReturnTest struct {
@@ -90,12 +73,12 @@ func (r runnerMock) Run(command string, _ time.Duration) ([]byte, []byte, error)
 	return r.out, r.errout, r.err
 }
 
-func TestExec(t *testing.T) {
+func TestExec2(t *testing.T) {
 	parser, _ := parsers.NewParser(&parsers.Config{
 		DataFormat: "json",
-		MetricName: "exec",
+		MetricName: "exec2",
 	})
-	e := &Exec{
+	e := &Exec2{
 		Log:      testutil.Logger{},
 		runner:   newRunnerMock([]byte(validJson), nil, nil),
 		Commands: []string{"testcommand arg1"},
@@ -117,15 +100,15 @@ func TestExec(t *testing.T) {
 		"users_2":       float64(2),
 		"users_3":       float64(3),
 	}
-	acc.AssertContainsFields(t, "exec", fields)
+	acc.AssertContainsFields(t, "exec2", fields)
 }
 
-func TestExecMalformed(t *testing.T) {
+func TestExec2Malformed(t *testing.T) {
 	parser, _ := parsers.NewParser(&parsers.Config{
 		DataFormat: "json",
-		MetricName: "exec",
+		MetricName: "exec2",
 	})
-	e := &Exec{
+	e := &Exec2{
 		Log:      testutil.Logger{},
 		runner:   newRunnerMock([]byte(malformedJson), nil, nil),
 		Commands: []string{"badcommand arg1"},
@@ -140,9 +123,9 @@ func TestExecMalformed(t *testing.T) {
 func TestCommandError(t *testing.T) {
 	parser, _ := parsers.NewParser(&parsers.Config{
 		DataFormat: "json",
-		MetricName: "exec",
+		MetricName: "exec2",
 	})
-	e := &Exec{
+	e := &Exec2{
 		Log:      testutil.Logger{},
 		runner:   newRunnerMock(nil, nil, fmt.Errorf("exit status code 1")),
 		Commands: []string{"badcommand"},
@@ -154,9 +137,9 @@ func TestCommandError(t *testing.T) {
 	assert.Equal(t, acc.NFields(), 0, "No new points should have been added")
 }
 
-func TestExecCommandWithGlob(t *testing.T) {
+func TestExec2CommandWithGlob(t *testing.T) {
 	parser, _ := parsers.NewValueParser("metric", "string", nil)
-	e := NewExec()
+	e := NewExec2()
 	e.Commands = []string{"/bin/ech* metric_value"}
 	e.SetParser(parser)
 
@@ -170,9 +153,9 @@ func TestExecCommandWithGlob(t *testing.T) {
 	acc.AssertContainsFields(t, "metric", fields)
 }
 
-func TestExecCommandWithoutGlob(t *testing.T) {
+func TestExec2CommandWithoutGlob(t *testing.T) {
 	parser, _ := parsers.NewValueParser("metric", "string", nil)
-	e := NewExec()
+	e := NewExec2()
 	e.Commands = []string{"/bin/echo metric_value"}
 	e.SetParser(parser)
 
@@ -186,9 +169,9 @@ func TestExecCommandWithoutGlob(t *testing.T) {
 	acc.AssertContainsFields(t, "metric", fields)
 }
 
-func TestExecCommandWithoutGlobAndPath(t *testing.T) {
+func TestExec2CommandWithoutGlobAndPath(t *testing.T) {
 	parser, _ := parsers.NewValueParser("metric", "string", nil)
-	e := NewExec()
+	e := NewExec2()
 	e.Commands = []string{"echo metric_value"}
 	e.SetParser(parser)
 
