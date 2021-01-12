@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/influxdata/telegraf"
 	"github.com/influxdata/telegraf/internal"
 	"github.com/influxdata/telegraf/plugins/inputs"
+	"github.com/influxdata/telegraf/plugins/outputs"
 	"github.com/influxdata/telegraf/plugins/parsers"
 	"github.com/influxdata/telegraf/plugins/parsers/nagios"
 	"github.com/kballard/go-shellquote"
@@ -50,9 +52,14 @@ type Exec2 struct {
 	Commands []string
 	Command  string
 
-	Pattern string
-	Ports   string            `toml:"listen_ports"`
-	cmds    map[string]string //<cmd, port>
+	Pattern      string
+	Ports        string            `toml:"listen_ports"`
+	cmds         map[string]string //<cmd, port>
+	addedPattern bool
+
+	ExCommands []string
+	ex_cmds    map[string]string
+	mutext     sync.RWMutex
 
 	Timeout internal.Duration
 
@@ -185,7 +192,19 @@ func (e *Exec2) addMetric(command string, metric telegraf.Metric, acc telegraf.A
 		metric.AddTag("port", port)
 	}
 
+	e.addExMetric(command, metric)
+
 	acc.AddMetric(metric)
+}
+
+func (e *Exec2) addExMetric(command string, metric telegraf.Metric) {
+	e.mutext.RLock()
+	defer e.mutext.RUnlock()
+
+	// add ex port tag support
+	if port, ok := e.ex_cmds[command]; ok {
+		metric.AddTag("port", port)
+	}
 }
 
 func (e *Exec2) SampleConfig() string {
@@ -202,6 +221,7 @@ func (e *Exec2) SetParser(parser parsers.Parser) {
 
 func (e *Exec2) Gather(acc telegraf.Accumulator) error {
 	var wg sync.WaitGroup
+
 	// Legacy single command support
 	if e.Command != "" {
 		e.Commands = append(e.Commands, e.Command)
@@ -239,17 +259,60 @@ func (e *Exec2) Gather(acc telegraf.Accumulator) error {
 		}
 	}
 
-	wg.Add(len(commands))
+	exCommands := e.readExCommandsLock(acc)
+
+	wg.Add(len(commands) + len(exCommands))
 	for _, command := range commands {
+		go e.ProcessCommand(command, acc, &wg)
+	}
+	for _, command := range exCommands {
 		go e.ProcessCommand(command, acc, &wg)
 	}
 	wg.Wait()
 	return nil
 }
 
-// addPatternCommands parse ports generate multi command by the specified pattern
+// readCommandsLock mutext read commands
+func (e *Exec2) readExCommandsLock(acc telegraf.Accumulator) []string {
+	e.mutext.RLock()
+	defer e.mutext.RUnlock()
+
+	commands := make([]string, 0, len(e.ExCommands))
+	for _, pattern := range e.ExCommands {
+		cmdAndArgs := strings.SplitN(pattern, " ", 2)
+		if len(cmdAndArgs) == 0 {
+			continue
+		}
+
+		matches, err := filepath.Glob(cmdAndArgs[0])
+		if err != nil {
+			acc.AddError(err)
+			continue
+		}
+
+		if len(matches) == 0 {
+			// There were no matches with the glob pattern, so let's assume
+			// that the command is in PATH and just run it as it is
+			commands = append(commands, pattern)
+		} else {
+			// There were matches, so we'll append each match together with
+			// the arguments to the commands slice
+			for _, match := range matches {
+				if len(cmdAndArgs) == 1 {
+					commands = append(commands, match)
+				} else {
+					commands = append(commands,
+						strings.Join([]string{match, cmdAndArgs[1]}, " "))
+				}
+			}
+		}
+	}
+	return commands
+}
+
+// addPatternCommandsLock parse ports generate multi command by the specified pattern
 func (e *Exec2) addPatternCommands() {
-	if e.Pattern != "" && e.Ports != "" {
+	if e.Pattern != "" && e.Ports != "" && !e.addedPattern {
 		ports := strings.Split(e.Ports, ",")
 		commands := make([]string, 0, len(ports))
 		e.cmds = make(map[string]string, len(ports))
@@ -257,10 +320,61 @@ func (e *Exec2) addPatternCommands() {
 			cmd := fmt.Sprintf(e.Pattern, port)
 			e.cmds[cmd] = port
 			commands = append(commands, cmd)
+			e.addedPattern = true
 		}
-
 		e.Commands = append(e.Commands, commands...)
 	}
+}
+
+// Connect satisfies the Ouput interface.
+func (e *Exec2) Connect() error {
+	return nil
+}
+
+// Close satisfies the Ouput interface.
+func (e *Exec2) Close() error {
+	return nil
+}
+
+// Write writes the metrics to the configured command.
+// receive http_listener_v2 metrics add commands.
+func (e *Exec2) Write(metrics []telegraf.Metric) error {
+	fmt.Println("Received msg...")
+	exPorts := make([]string, 0)
+
+	for i, m := range metrics {
+		fmt.Printf("Received metrics[%d]: %v \n", i, m)
+		fields := m.FieldList()
+		for _, f := range fields {
+			if value, ok := f.Value.(float64); ok {
+				exPorts = append(exPorts, strconv.FormatFloat(value, 'f', -1, 64))
+			}
+		}
+		fmt.Printf("Received fields:[%v] \n", exPorts)
+	}
+
+	fmt.Printf("Exec2 commands: %v \n", e.Commands)
+
+	if e.Pattern != "" && len(exPorts) > 0 {
+		// write lock
+		e.mutext.Lock()
+		defer e.mutext.Unlock()
+
+		// clear e.ExCommands
+		e.ExCommands = make([]string, 0)
+
+		commands := make([]string, 0, len(exPorts))
+		e.ex_cmds = make(map[string]string, len(exPorts))
+		for _, port := range exPorts {
+			cmd := fmt.Sprintf(e.Pattern, port)
+			e.ex_cmds[cmd] = port
+			commands = append(commands, cmd)
+		}
+
+		e.ExCommands = append(e.ExCommands, commands...)
+	}
+
+	return nil
 }
 
 func (e *Exec2) Init() error {
@@ -270,7 +384,12 @@ func (e *Exec2) Init() error {
 }
 
 func init() {
+	exec := NewExec2()
 	inputs.Add("exec2", func() telegraf.Input {
-		return NewExec2()
+		return exec
+	})
+
+	outputs.Add("exec2", func() telegraf.Output {
+		return exec
 	})
 }
