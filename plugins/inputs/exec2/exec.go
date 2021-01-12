@@ -2,7 +2,9 @@ package exec2
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -13,6 +15,8 @@ import (
 
 	"github.com/influxdata/telegraf"
 	"github.com/influxdata/telegraf/internal"
+	util "github.com/influxdata/telegraf/internal/config/frxs"
+	common "github.com/influxdata/telegraf/plugins/common/http"
 	"github.com/influxdata/telegraf/plugins/inputs"
 	"github.com/influxdata/telegraf/plugins/outputs"
 	"github.com/influxdata/telegraf/plugins/parsers"
@@ -67,6 +71,17 @@ type Exec2 struct {
 
 	runner Runner
 	Log    telegraf.Logger `toml:"-"`
+
+	// http client
+	client *http.Client
+	URL    string `toml:"url"`
+	isInit bool
+}
+
+type PortResponse struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    []int  `json:"data"`
 }
 
 func NewExec2() *Exec2 {
@@ -193,6 +208,15 @@ func (e *Exec2) addMetric(command string, metric telegraf.Metric, acc telegraf.A
 	}
 
 	e.addExMetric(command, metric)
+
+	// filter "", set "0" as default.
+	for k, v := range metric.Fields() {
+		value := v.(string)
+		if value == "" {
+			metric.RemoveField(k)
+			metric.AddField(k, "0")
+		}
+	}
 
 	acc.AddMetric(metric)
 }
@@ -355,6 +379,12 @@ func (e *Exec2) Write(metrics []telegraf.Metric) error {
 
 	fmt.Printf("Exec2 commands: %v \n", e.Commands)
 
+	e.addExPatternCommands(exPorts)
+
+	return nil
+}
+
+func (e *Exec2) addExPatternCommands(exPorts []string) {
 	if e.Pattern != "" && len(exPorts) > 0 {
 		// write lock
 		e.mutext.Lock()
@@ -373,14 +403,77 @@ func (e *Exec2) Write(metrics []telegraf.Metric) error {
 
 		e.ExCommands = append(e.ExCommands, commands...)
 	}
-
-	return nil
+	fmt.Printf("e.ExCommand---> %v", e.ExCommands)
 }
 
 func (e *Exec2) Init() error {
 	// Legacy pattern command support
 	e.addPatternCommands()
+
+	// init ports list
+	if !e.isInit {
+		err := e.httpInit()
+		if err != nil {
+			return err
+		}
+
+		exPorts, err := e.gather()
+		if err != nil {
+			return err
+		}
+		e.addExPatternCommands(exPorts)
+
+		e.isInit = true
+	}
+
 	return nil
+}
+
+func (e *Exec2) httpInit() error {
+	e.client = &http.Client{
+		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+		},
+		Timeout: 6 * time.Second,
+	}
+	return nil
+}
+
+// gather get all ports from console by this ip as parameter.
+// gathers. This is called by exec2 on initial
+func (e *Exec2) gather() (exPorts []string, rsp_err error) {
+	localIP, err := util.GetAvaliableLocalIP()
+	if err != nil {
+		rsp_err = err
+	}
+	realUrl := e.URL + localIP
+	ports, err := e.gatherURL(realUrl)
+	if err != nil {
+		fmt.Printf("[url=%s]: %s", realUrl, err)
+		rsp_err = err
+	} else {
+		exPorts = append(exPorts, ports...)
+	}
+	return
+}
+
+func (e *Exec2) gatherURL(url string) (exPorts []string, rsp_err error) {
+	resp, err := common.HttpGet(e.client, url)
+	if err != nil {
+		rsp_err = err
+	}
+
+	portResponse := &PortResponse{}
+	err = json.Unmarshal(resp.Body, portResponse)
+	if err != nil {
+		rsp_err = err
+	}
+	fmt.Printf("resp=%v \n", portResponse)
+
+	for _, v := range portResponse.Data {
+		exPorts = append(exPorts, strconv.Itoa(v))
+	}
+	return
 }
 
 func init() {
