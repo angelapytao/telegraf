@@ -19,6 +19,8 @@ type accumulator struct {
 	precision time.Duration
 }
 
+// NewAccumulator return a interface type
+// pointer type of accumulator implements the interface telegraf.Accumulator
 func NewAccumulator(
 	maker MetricMaker,
 	metrics chan<- telegraf.Metric,

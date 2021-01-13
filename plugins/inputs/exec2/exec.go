@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os/exec"
 	"path/filepath"
@@ -363,18 +364,17 @@ func (e *Exec2) Close() error {
 // Write writes the metrics to the configured command.
 // receive http_listener_v2 metrics add commands.
 func (e *Exec2) Write(metrics []telegraf.Metric) error {
-	fmt.Println("Received msg...")
-	exPorts := make([]string, 0)
+	log.Printf("I! [exec2] Received metrics: %v", metrics)
 
-	for i, m := range metrics {
-		fmt.Printf("Received metrics[%d]: %v \n", i, m)
+	exPorts := make([]string, 0)
+	for _, m := range metrics {
 		fields := m.FieldList()
 		for _, f := range fields {
 			if value, ok := f.Value.(float64); ok {
 				exPorts = append(exPorts, strconv.FormatFloat(value, 'f', -1, 64))
 			}
 		}
-		fmt.Printf("Received fields:[%v] \n", exPorts)
+		log.Printf("I! [exec2] converted ports: %v", exPorts)
 	}
 
 	fmt.Printf("Exec2 commands: %v \n", e.Commands)
