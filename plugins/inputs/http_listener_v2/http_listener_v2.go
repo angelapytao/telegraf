@@ -241,7 +241,6 @@ func (h *HTTPListenerV2) serveWrite(res http.ResponseWriter, req *http.Request) 
 
 		h.acc.AddMetric(m)
 	}
-	fmt.Printf("listener metrics: %v \n", metrics)
 	res.WriteHeader(http.StatusNoContent)
 }
 

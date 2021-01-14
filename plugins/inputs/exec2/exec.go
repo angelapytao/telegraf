@@ -374,11 +374,10 @@ func (e *Exec2) Write(metrics []telegraf.Metric) error {
 				exPorts = append(exPorts, strconv.FormatFloat(value, 'f', -1, 64))
 			}
 		}
-		log.Printf("I! [exec2] converted ports: %v", exPorts)
+		log.Printf("I! [exec2] converted ports: %v\n", exPorts)
 	}
 
-	fmt.Printf("Exec2 commands: %v \n", e.Commands)
-
+	fmt.Printf("I! [exec2] commands: %v \n", e.Commands)
 	e.addExPatternCommands(exPorts)
 
 	return nil
@@ -403,7 +402,6 @@ func (e *Exec2) addExPatternCommands(exPorts []string) {
 
 		e.ExCommands = append(e.ExCommands, commands...)
 	}
-	fmt.Printf("e.ExCommand---> %v", e.ExCommands)
 }
 
 func (e *Exec2) Init() error {
@@ -447,17 +445,25 @@ func (e *Exec2) gather() (exPorts []string, rsp_err error) {
 		rsp_err = err
 	}
 	realUrl := e.URL + localIP
-	ports, err := e.gatherURL(realUrl)
-	if err != nil {
-		fmt.Printf("[url=%s]: %s", realUrl, err)
-		rsp_err = err
-	} else {
-		exPorts = append(exPorts, ports...)
+
+	acc := make(map[string]interface{}, 1)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func(url string, acc map[string]interface{}) {
+		defer wg.Done()
+		if err := e.gatherURL(realUrl, acc); err != nil {
+			log.Printf("gather ports err: %v", fmt.Errorf("[url=%s]: %s", url, err))
+		}
+	}(realUrl, acc)
+	wg.Wait()
+
+	if v, ok := acc["ExPorts"].([]string); ok {
+		exPorts = append(exPorts, v...)
 	}
 	return
 }
 
-func (e *Exec2) gatherURL(url string) (exPorts []string, rsp_err error) {
+func (e *Exec2) gatherURL(url string, acc map[string]interface{}) (rsp_err error) {
 	resp, err := common.HttpGet(e.client, url)
 	if err != nil {
 		rsp_err = err
@@ -470,9 +476,12 @@ func (e *Exec2) gatherURL(url string) (exPorts []string, rsp_err error) {
 	}
 	fmt.Printf("resp=%v \n", portResponse)
 
-	for _, v := range portResponse.Data {
-		exPorts = append(exPorts, strconv.Itoa(v))
+	exPorts := make([]string, len(portResponse.Data))
+	for i, v := range portResponse.Data {
+		exPorts[i] = strconv.Itoa(v)
 	}
+
+	acc["ExPorts"] = exPorts
 	return
 }
 
