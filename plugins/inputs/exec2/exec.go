@@ -362,7 +362,7 @@ func (e *Exec2) Close() error {
 }
 
 // Write writes the metrics to the configured command.
-// receive http_listener_v2 metrics add commands.
+// receive metrics from http_listener_v2, add commands to the execute command list.
 func (e *Exec2) Write(metrics []telegraf.Metric) error {
 	log.Printf("I! [exec2] Received metrics: %v", metrics)
 

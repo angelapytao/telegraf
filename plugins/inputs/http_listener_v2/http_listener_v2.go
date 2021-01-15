@@ -241,7 +241,7 @@ func (h *HTTPListenerV2) serveWrite(res http.ResponseWriter, req *http.Request) 
 
 		h.acc.AddMetric(m)
 	}
-	res.WriteHeader(http.StatusNoContent)
+	res.WriteHeader(http.StatusOK)
 }
 
 func (h *HTTPListenerV2) collectBody(res http.ResponseWriter, req *http.Request) ([]byte, bool) {
