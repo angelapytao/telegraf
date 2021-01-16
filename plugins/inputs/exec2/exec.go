@@ -2,6 +2,7 @@ package exec2
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -70,8 +71,8 @@ type Exec2 struct {
 
 	Timeout                internal.Duration
 	GatherErrRetryInterval internal.Duration `toml:"gather_err_retry_interval"`
-	gatherErr              bool
 	parser                 parsers.Parser
+	cancel                 context.CancelFunc
 
 	runner Runner
 	Log    telegraf.Logger `toml:"-"`
@@ -364,6 +365,15 @@ func (e *Exec2) Close() error {
 	return nil
 }
 
+func (e *Exec2) Start(acc telegraf.Accumulator) error {
+	// e.ctx, e.cancel = context.WithCancel(context.Background())
+	return nil
+}
+
+func (e *Exec2) Stop() {
+	e.cancel()
+}
+
 // Write writes the metrics to the configured command.
 // receive metrics from http_listener_v2, add commands to the execute command list.
 func (e *Exec2) Write(metrics []telegraf.Metric) error {
@@ -426,7 +436,9 @@ func (e *Exec2) Init() error {
 			e.Log.Errorf("Gather ports err: %v", err)
 			// return err
 
-			e.gatherOnErrRetry(realUrl, 10*time.Second)
+			var ctx context.Context
+			ctx, e.cancel = context.WithCancel(context.Background())
+			e.gatherOnErrRetry(realUrl, ctx, 10*time.Second)
 		}
 		e.addExPatternCommands(ports)
 
@@ -471,18 +483,38 @@ func (e *Exec2) gather(realUrl string) (ports []string, rspErr error) {
 
 func (e *Exec2) gatherOnErrRetry(
 	url string,
+	ctx context.Context,
 	interval time.Duration,
 ) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	for {
-		// err := internal.SleepContext(ctx, interval)
-		// if err != nil {
-		// 	return
-		// }
+	// ctx, cancel := context.WithCancel(context.Background())
 
-		time.Sleep(interval)
+	// signals := make(chan os.Signal)
+	// signal.Notify(signals, os.Interrupt, syscall.SIGHUP,
+	// 	syscall.SIGTERM, syscall.SIGINT)
+	// go func() {
+	// 	select {
+	// 	case sig := <-signals:
+	// 		if sig == syscall.SIGHUP {
+	// 			log.Printf("I! Reloading Telegraf config")
+	// 			<-reload
+	// 			reload <- true
+	// 		}
+	// 		cancel()
+	// 	case <-stop:
+	// 		cancel()
+	// 	}
+	// }()
+
+	for {
+		err := internal.SleepContext(ctx, interval)
+		if err != nil {
+			return
+		}
+
+		// time.Sleep(interval)
 
 		onErr := make(chan error)
 		acc := make(map[string]interface{}, 1)
@@ -493,6 +525,8 @@ func (e *Exec2) gatherOnErrRetry(
 		select {
 		case <-onErr: // retry
 			continue
+		case <-ctx.Done():
+			return
 		case <-ticker.C:
 			if v, ok := acc["ports"].([]string); ok {
 				e.Log.Infof("Gather info: %v", v)
@@ -532,7 +566,6 @@ func init() {
 	inputs.Add("exec2", func() telegraf.Input {
 		return exec
 	})
-
 	outputs.Add("exec2", func() telegraf.Output {
 		return exec
 	})
