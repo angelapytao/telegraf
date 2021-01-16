@@ -4,7 +4,6 @@ import (
 	"compress/gzip"
 	"crypto/subtle"
 	"crypto/tls"
-	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -265,7 +264,8 @@ func (h *HTTPListenerV2) collectBody(res http.ResponseWriter, req *http.Request)
 		tooLarge(res)
 		return nil, false
 	}
-	fmt.Println("body=", string(bytes))
+
+	h.Log.Debugf("Parsed body: %s", string(bytes))
 	return bytes, true
 }
 

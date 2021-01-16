@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"os/exec"
 	"path/filepath"
@@ -57,13 +56,13 @@ type Exec2 struct {
 	Commands []string
 	Command  string
 
-	Pattern      string
-	Ports        string            `toml:"listen_ports"`
-	cmds         map[string]string //<cmd, port>
-	addedPattern bool
+	Pattern  string
+	Ports    string            `toml:"listen_ports"`
+	cmd2Port map[string]string //<cmd, port>
+	added    bool
 
-	ExCommands []string
-	ex_cmds    map[string]string
+	exCommands []string
+	exCmd2Port map[string]string
 	mutext     sync.RWMutex
 
 	Timeout internal.Duration
@@ -76,7 +75,7 @@ type Exec2 struct {
 	// http client
 	client *http.Client
 	URL    string `toml:"url"`
-	isInit bool
+	init   bool
 }
 
 type PortResponse struct {
@@ -204,7 +203,7 @@ func (e *Exec2) ProcessCommand(command string, acc telegraf.Accumulator, wg *syn
 
 func (e *Exec2) addMetric(command string, metric telegraf.Metric, acc telegraf.Accumulator) {
 	// add port tag support
-	if port, ok := e.cmds[command]; ok {
+	if port, ok := e.cmd2Port[command]; ok {
 		metric.AddTag("port", port)
 	}
 
@@ -227,7 +226,7 @@ func (e *Exec2) addExMetric(command string, metric telegraf.Metric) {
 	defer e.mutext.RUnlock()
 
 	// add ex port tag support
-	if port, ok := e.ex_cmds[command]; ok {
+	if port, ok := e.exCmd2Port[command]; ok {
 		metric.AddTag("port", port)
 	}
 }
@@ -302,8 +301,8 @@ func (e *Exec2) readExCommandsLock(acc telegraf.Accumulator) []string {
 	e.mutext.RLock()
 	defer e.mutext.RUnlock()
 
-	commands := make([]string, 0, len(e.ExCommands))
-	for _, pattern := range e.ExCommands {
+	commands := make([]string, 0, len(e.exCommands))
+	for _, pattern := range e.exCommands {
 		cmdAndArgs := strings.SplitN(pattern, " ", 2)
 		if len(cmdAndArgs) == 0 {
 			continue
@@ -335,17 +334,17 @@ func (e *Exec2) readExCommandsLock(acc telegraf.Accumulator) []string {
 	return commands
 }
 
-// addPatternCommandsLock parse ports generate multi command by the specified pattern
+// addPatternCommands split ports to generate multi commands by the specified pattern
 func (e *Exec2) addPatternCommands() {
-	if e.Pattern != "" && e.Ports != "" && !e.addedPattern {
+	if e.Pattern != "" && e.Ports != "" && !e.added {
 		ports := strings.Split(e.Ports, ",")
 		commands := make([]string, 0, len(ports))
-		e.cmds = make(map[string]string, len(ports))
+		e.cmd2Port = make(map[string]string, len(ports))
 		for _, port := range ports {
 			cmd := fmt.Sprintf(e.Pattern, port)
-			e.cmds[cmd] = port
+			e.cmd2Port[cmd] = port
 			commands = append(commands, cmd)
-			e.addedPattern = true
+			e.added = true
 		}
 		e.Commands = append(e.Commands, commands...)
 	}
@@ -364,43 +363,40 @@ func (e *Exec2) Close() error {
 // Write writes the metrics to the configured command.
 // receive metrics from http_listener_v2, add commands to the execute command list.
 func (e *Exec2) Write(metrics []telegraf.Metric) error {
-	log.Printf("I! [exec2] Received metrics: %v", metrics)
+	e.Log.Infof("Received metrics: %v", metrics)
 
-	exPorts := make([]string, 0)
+	ports := make([]string, 0)
 	for _, m := range metrics {
 		fields := m.FieldList()
 		for _, f := range fields {
 			if value, ok := f.Value.(float64); ok {
-				exPorts = append(exPorts, strconv.FormatFloat(value, 'f', -1, 64))
+				ports = append(ports, strconv.FormatFloat(value, 'f', -1, 64))
 			}
 		}
-		log.Printf("I! [exec2] converted ports: %v\n", exPorts)
 	}
-
-	fmt.Printf("I! [exec2] commands: %v \n", e.Commands)
-	e.addExPatternCommands(exPorts)
+	e.addExPatternCommands(ports)
 
 	return nil
 }
 
-func (e *Exec2) addExPatternCommands(exPorts []string) {
-	if e.Pattern != "" && len(exPorts) > 0 {
+func (e *Exec2) addExPatternCommands(ports []string) {
+	if e.Pattern != "" && len(ports) > 0 {
 		// write lock
 		e.mutext.Lock()
 		defer e.mutext.Unlock()
 
-		// clear e.ExCommands
-		e.ExCommands = make([]string, 0)
+		// clear e.exCommands
+		e.exCommands = make([]string, 0)
 
-		commands := make([]string, 0, len(exPorts))
-		e.ex_cmds = make(map[string]string, len(exPorts))
-		for _, port := range exPorts {
+		commands := make([]string, 0, len(ports))
+		e.exCmd2Port = make(map[string]string, len(ports))
+		for _, port := range ports {
 			cmd := fmt.Sprintf(e.Pattern, port)
-			e.ex_cmds[cmd] = port
+			e.exCmd2Port[cmd] = port
 			commands = append(commands, cmd)
 		}
 
-		e.ExCommands = append(e.ExCommands, commands...)
+		e.exCommands = append(e.exCommands, commands...)
 	}
 }
 
@@ -409,19 +405,20 @@ func (e *Exec2) Init() error {
 	e.addPatternCommands()
 
 	// init ports list
-	if !e.isInit {
+	if !e.init {
 		err := e.httpInit()
 		if err != nil {
 			return err
 		}
 
-		exPorts, err := e.gather()
+		ports, err := e.gather()
 		if err != nil {
-			return err
+			e.Log.Errorf("Gather ports err: %v", err)
+			// return err
 		}
-		e.addExPatternCommands(exPorts)
+		e.addExPatternCommands(ports)
 
-		e.isInit = true
+		e.init = true
 	}
 
 	return nil
@@ -439,49 +436,53 @@ func (e *Exec2) httpInit() error {
 
 // gather get all ports from console by this ip as parameter.
 // gathers. This is called by exec2 on initial
-func (e *Exec2) gather() (exPorts []string, rsp_err error) {
+func (e *Exec2) gather() (ports []string, rspErr error) {
 	localIP, err := util.GetAvaliableLocalIP()
 	if err != nil {
-		rsp_err = err
+		rspErr = err
 	}
 	realUrl := e.URL + localIP
 
-	acc := make(map[string]interface{}, 1)
+	acc := make(map[string]interface{}, 2)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func(url string, acc map[string]interface{}) {
 		defer wg.Done()
 		if err := e.gatherURL(realUrl, acc); err != nil {
-			log.Printf("gather ports err: %v", fmt.Errorf("[url=%s]: %s", url, err))
+			acc["err"] = fmt.Errorf("[url=%s]: %s", url, err)
 		}
 	}(realUrl, acc)
 	wg.Wait()
 
-	if v, ok := acc["ExPorts"].([]string); ok {
-		exPorts = append(exPorts, v...)
+	if v, ok := acc["ports"].([]string); ok {
+		ports = append(ports, v...)
+	}
+	if v, ok := acc["err"].(error); ok {
+		rspErr = v
 	}
 	return
 }
 
-func (e *Exec2) gatherURL(url string, acc map[string]interface{}) (rsp_err error) {
+func (e *Exec2) gatherURL(url string, acc map[string]interface{}) (rspErr error) {
 	resp, err := common.HttpGet(e.client, url)
 	if err != nil {
-		rsp_err = err
+		rspErr = err
 	}
 
 	portResponse := &PortResponse{}
 	err = json.Unmarshal(resp.Body, portResponse)
 	if err != nil {
-		rsp_err = err
+		rspErr = err
 	}
-	fmt.Printf("resp=%v \n", portResponse)
 
-	exPorts := make([]string, len(portResponse.Data))
+	e.Log.Infof("Response: %v", portResponse)
+
+	ports := make([]string, len(portResponse.Data))
 	for i, v := range portResponse.Data {
-		exPorts[i] = strconv.Itoa(v)
+		ports[i] = strconv.Itoa(v)
 	}
 
-	acc["ExPorts"] = exPorts
+	acc["ports"] = ports
 	return
 }
 
