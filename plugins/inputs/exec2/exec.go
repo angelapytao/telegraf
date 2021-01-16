@@ -40,6 +40,9 @@ const sampleConfig = `
   ## Timeout for each command to complete.
   timeout = "5s"
 
+  ## When init gather ports err, the interval on retry.
+  gather_err_interval = "120s"
+
   ## measurement name suffix (for separating different commands)
   name_suffix = "_mycollector"
 
@@ -65,9 +68,10 @@ type Exec2 struct {
 	exCmd2Port map[string]string
 	mutext     sync.RWMutex
 
-	Timeout internal.Duration
-
-	parser parsers.Parser
+	Timeout                internal.Duration
+	GatherErrRetryInterval internal.Duration `toml:"gather_err_retry_interval"`
+	gatherErr              bool
+	parser                 parsers.Parser
 
 	runner Runner
 	Log    telegraf.Logger `toml:"-"`
@@ -411,10 +415,18 @@ func (e *Exec2) Init() error {
 			return err
 		}
 
-		ports, err := e.gather()
+		localIP, err := util.GetAvaliableLocalIP()
+		if err != nil {
+			return err
+		}
+
+		realUrl := e.URL + localIP
+		ports, err := e.gather(realUrl)
 		if err != nil {
 			e.Log.Errorf("Gather ports err: %v", err)
 			// return err
+
+			e.gatherOnErrRetry(realUrl, 10*time.Second)
 		}
 		e.addExPatternCommands(ports)
 
@@ -435,14 +447,8 @@ func (e *Exec2) httpInit() error {
 }
 
 // gather get all ports from console by this ip as parameter.
-// gathers. This is called by exec2 on initial
-func (e *Exec2) gather() (ports []string, rspErr error) {
-	localIP, err := util.GetAvaliableLocalIP()
-	if err != nil {
-		rspErr = err
-	}
-	realUrl := e.URL + localIP
-
+// This is called by exec2 on initial
+func (e *Exec2) gather(realUrl string) (ports []string, rspErr error) {
 	acc := make(map[string]interface{}, 2)
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -461,6 +467,41 @@ func (e *Exec2) gather() (ports []string, rspErr error) {
 		rspErr = v
 	}
 	return
+}
+
+func (e *Exec2) gatherOnErrRetry(
+	url string,
+	interval time.Duration,
+) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		// err := internal.SleepContext(ctx, interval)
+		// if err != nil {
+		// 	return
+		// }
+
+		time.Sleep(interval)
+
+		onErr := make(chan error)
+		acc := make(map[string]interface{}, 1)
+		go func() {
+			onErr <- e.gatherURL(url, acc)
+		}()
+
+		select {
+		case <-onErr: // retry
+			continue
+		case <-ticker.C:
+			if v, ok := acc["ports"].([]string); ok {
+				e.Log.Infof("Gather info: %v", v)
+				return
+				// ports = append(ports, v...)
+			}
+
+		}
+	}
 }
 
 func (e *Exec2) gatherURL(url string, acc map[string]interface{}) (rspErr error) {
