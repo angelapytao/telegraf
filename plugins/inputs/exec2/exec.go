@@ -5,13 +5,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/influxdata/telegraf"
@@ -72,6 +76,7 @@ type Exec2 struct {
 	Timeout                internal.Duration
 	GatherErrRetryInterval internal.Duration `toml:"gather_err_retry_interval"`
 	parser                 parsers.Parser
+	acc                    telegraf.Accumulator
 	cancel                 context.CancelFunc
 
 	runner Runner
@@ -367,10 +372,14 @@ func (e *Exec2) Close() error {
 
 func (e *Exec2) Start(acc telegraf.Accumulator) error {
 	// e.ctx, e.cancel = context.WithCancel(context.Background())
+	e.acc = acc
+	e.Log.Info("Service start called...")
+
 	return nil
 }
 
 func (e *Exec2) Stop() {
+	e.Log.Info("Service stop called...")
 	e.cancel()
 }
 
@@ -438,7 +447,7 @@ func (e *Exec2) Init() error {
 
 			var ctx context.Context
 			ctx, e.cancel = context.WithCancel(context.Background())
-			e.gatherOnErrRetry(realUrl, ctx, 10*time.Second)
+			e.gatherOnErrRetry(realUrl, ctx, e.GatherErrRetryInterval.Duration)
 		}
 		e.addExPatternCommands(ports)
 
@@ -508,13 +517,27 @@ func (e *Exec2) gatherOnErrRetry(
 	// 	}
 	// }()
 
+	signals := make(chan os.Signal)
+	signal.Notify(signals, os.Interrupt, syscall.SIGHUP,
+		syscall.SIGTERM, syscall.SIGINT)
+
+	go func() {
+		select {
+		case sig := <-signals:
+			if sig == syscall.SIGHUP {
+				log.Printf("I! Reloading Telegraf config")
+			}
+			e.cancel()
+			// case <-stop:
+			// 	cancel()
+		}
+	}()
+
 	for {
 		err := internal.SleepContext(ctx, interval)
 		if err != nil {
 			return
 		}
-
-		// time.Sleep(interval)
 
 		onErr := make(chan error)
 		acc := make(map[string]interface{}, 1)
