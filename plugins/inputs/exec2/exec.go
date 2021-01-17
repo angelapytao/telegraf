@@ -5,17 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
-	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/influxdata/telegraf"
@@ -371,7 +367,6 @@ func (e *Exec2) Close() error {
 }
 
 func (e *Exec2) Start(acc telegraf.Accumulator) error {
-	// e.ctx, e.cancel = context.WithCancel(context.Background())
 	e.acc = acc
 	e.Log.Info("Service start called...")
 
@@ -447,7 +442,7 @@ func (e *Exec2) Init() error {
 
 			var ctx context.Context
 			ctx, e.cancel = context.WithCancel(context.Background())
-			e.gatherOnErrRetry(realUrl, ctx, e.GatherErrRetryInterval.Duration)
+			go e.gatherOnErrRetry(realUrl, ctx, e.GatherErrRetryInterval.Duration)
 		}
 		e.addExPatternCommands(ports)
 
@@ -498,40 +493,20 @@ func (e *Exec2) gatherOnErrRetry(
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	// ctx, cancel := context.WithCancel(context.Background())
+	/*
+		signals := make(chan os.Signal)
+		signal.Notify(signals, os.Interrupt, syscall.SIGHUP,
+			syscall.SIGTERM, syscall.SIGINT)
 
-	// signals := make(chan os.Signal)
-	// signal.Notify(signals, os.Interrupt, syscall.SIGHUP,
-	// 	syscall.SIGTERM, syscall.SIGINT)
-	// go func() {
-	// 	select {
-	// 	case sig := <-signals:
-	// 		if sig == syscall.SIGHUP {
-	// 			log.Printf("I! Reloading Telegraf config")
-	// 			<-reload
-	// 			reload <- true
-	// 		}
-	// 		cancel()
-	// 	case <-stop:
-	// 		cancel()
-	// 	}
-	// }()
-
-	signals := make(chan os.Signal)
-	signal.Notify(signals, os.Interrupt, syscall.SIGHUP,
-		syscall.SIGTERM, syscall.SIGINT)
-
-	go func() {
-		select {
-		case sig := <-signals:
-			if sig == syscall.SIGHUP {
-				log.Printf("I! Reloading Telegraf config")
+		go func() {
+			select {
+			case sig := <-signals:
+				if sig == syscall.SIGHUP {
+					e.Log.Infof("I! gatherOnErrRetry stop.")
+				}
+				e.cancel()
 			}
-			e.cancel()
-			// case <-stop:
-			// 	cancel()
-		}
-	}()
+		}()*/
 
 	for {
 		err := internal.SleepContext(ctx, interval)
