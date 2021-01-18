@@ -437,7 +437,6 @@ func (e *Exec2) Init() error {
 		ports, err := e.gather(realUrl)
 		if err != nil {
 			e.Log.Errorf("Gather ports err: %v", err)
-			// return err
 
 			var ctx context.Context
 			ctx, e.cancel = context.WithCancel(context.Background())
@@ -499,22 +498,30 @@ func (e *Exec2) gatherOnErrRetry(
 		}
 
 		onErr := make(chan error)
-		acc := make(map[string]interface{}, 1)
+		acc := make(map[string]interface{}, 2)
 		go func() {
+			e.Log.Infof("gatherURL in.")
 			onErr <- e.gatherURL(url, acc)
 		}()
 
 		select {
 		case <-onErr: // retry
+			e.Log.Infof("GatherOnErrRetry continue.")
 			continue
 		case <-ctx.Done():
+			e.Log.Infof("GatherOnErrRetry stoped.")
 			return
 		case <-ticker.C:
-			if v, ok := acc["ports"].([]string); ok {
-				e.Log.Infof("Gather info: %v", v)
+			e.Log.Infof("GatherOnErrRetry ticker in.")
+			if v, ok := acc["ok"].(bool); ok && v {
+				if v, ok := acc["ports"].([]string); ok {
+					e.Log.Infof("Gather info: %v", v)
+					e.addExPatternCommands(v)
+				}
+				e.Log.Infof("GatherOnErrRetry return.")
 				return
-				// ports = append(ports, v...)
 			}
+			e.Log.Infof("GatherOnErrRetry ticker out.")
 		}
 	}
 }
@@ -523,15 +530,18 @@ func (e *Exec2) gatherURL(url string, acc map[string]interface{}) (rspErr error)
 	resp, err := common.HttpGet(e.client, url)
 	if err != nil {
 		rspErr = err
+		return
 	}
 
 	portResponse := &PortResponse{}
 	err = json.Unmarshal(resp.Body, portResponse)
 	if err != nil {
 		rspErr = err
+		return
 	}
 
 	e.Log.Infof("Response: %v", portResponse)
+	acc["ok"] = true
 
 	ports := make([]string, len(portResponse.Data))
 	for i, v := range portResponse.Data {

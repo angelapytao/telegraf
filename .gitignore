@@ -3,4 +3,4 @@
 /telegraf.exe
 /telegraf.gz
 /vendor
-/etc/telegraf*.conf
+/etc/telegraf-*.conf
