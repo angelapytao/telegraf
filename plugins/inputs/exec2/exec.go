@@ -72,7 +72,6 @@ type Exec2 struct {
 	Timeout                internal.Duration
 	GatherErrRetryInterval internal.Duration `toml:"gather_err_retry_interval"`
 	parser                 parsers.Parser
-	acc                    telegraf.Accumulator
 	cancel                 context.CancelFunc
 
 	runner Runner
@@ -367,15 +366,15 @@ func (e *Exec2) Close() error {
 }
 
 func (e *Exec2) Start(acc telegraf.Accumulator) error {
-	e.acc = acc
 	e.Log.Info("Service start called...")
-
 	return nil
 }
 
 func (e *Exec2) Stop() {
 	e.Log.Info("Service stop called...")
-	e.cancel()
+	if e.cancel != nil {
+		e.cancel()
+	}
 }
 
 // Write writes the metrics to the configured command.
@@ -493,21 +492,6 @@ func (e *Exec2) gatherOnErrRetry(
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	/*
-		signals := make(chan os.Signal)
-		signal.Notify(signals, os.Interrupt, syscall.SIGHUP,
-			syscall.SIGTERM, syscall.SIGINT)
-
-		go func() {
-			select {
-			case sig := <-signals:
-				if sig == syscall.SIGHUP {
-					e.Log.Infof("I! gatherOnErrRetry stop.")
-				}
-				e.cancel()
-			}
-		}()*/
-
 	for {
 		err := internal.SleepContext(ctx, interval)
 		if err != nil {
@@ -531,7 +515,6 @@ func (e *Exec2) gatherOnErrRetry(
 				return
 				// ports = append(ports, v...)
 			}
-
 		}
 	}
 }
