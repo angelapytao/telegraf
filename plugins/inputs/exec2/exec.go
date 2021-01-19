@@ -440,7 +440,7 @@ func (e *Exec2) Init() error {
 
 			var ctx context.Context
 			ctx, e.cancel = context.WithCancel(context.Background())
-			go e.gatherOnErrRetry(realUrl, ctx, e.GatherErrRetryInterval.Duration)
+			go e.gatherErrRetryInterval(realUrl, ctx, e.GatherErrRetryInterval.Duration)
 		}
 		e.addExPatternCommands(ports)
 
@@ -483,7 +483,7 @@ func (e *Exec2) gather(realUrl string) (ports []string, rspErr error) {
 	return
 }
 
-func (e *Exec2) gatherOnErrRetry(
+func (e *Exec2) gatherErrRetryInterval(
 	url string,
 	ctx context.Context,
 	interval time.Duration,
@@ -497,31 +497,48 @@ func (e *Exec2) gatherOnErrRetry(
 			return
 		}
 
-		onErr := make(chan error)
-		acc := make(map[string]interface{}, 2)
-		go func() {
-			e.Log.Infof("gatherURL in.")
-			onErr <- e.gatherURL(url, acc)
-		}()
+		acc := make(map[string]interface{}, 1)
+
+		err = e.gatherErrOnce(url, acc, interval)
+		if err != nil {
+			e.Log.Infof("gatherURL in err: %v", err)
+		}
 
 		select {
-		case <-onErr: // retry
-			e.Log.Infof("GatherOnErrRetry continue.")
-			continue
 		case <-ctx.Done():
 			e.Log.Infof("GatherOnErrRetry stoped.")
 			return
 		case <-ticker.C:
 			e.Log.Infof("GatherOnErrRetry ticker in.")
-			if v, ok := acc["ok"].(bool); ok && v {
-				if v, ok := acc["ports"].([]string); ok {
-					e.Log.Infof("Gather info: %v", v)
-					e.addExPatternCommands(v)
-				}
+			if v, ok := acc["ports"].([]string); ok {
+				e.Log.Infof("Gather info: %v", v)
+				e.addExPatternCommands(v)
 				e.Log.Infof("GatherOnErrRetry return.")
 				return
 			}
 			e.Log.Infof("GatherOnErrRetry ticker out.")
+		}
+	}
+}
+
+func (e *Exec2) gatherErrOnce(
+	url string,
+	acc map[string]interface{},
+	timeout time.Duration) error {
+	ticker := time.NewTicker(timeout)
+	defer ticker.Stop()
+
+	done := make(chan error)
+	go func() {
+		done <- e.gatherURL(url, acc)
+	}()
+
+	for {
+		select {
+		case err := <-done:
+			return err
+		case <-ticker.C:
+			e.Log.Infof("W! [exec2] [%s] did not complete within its interval", "gatherErrOnce")
 		}
 	}
 }
@@ -541,7 +558,6 @@ func (e *Exec2) gatherURL(url string, acc map[string]interface{}) (rspErr error)
 	}
 
 	e.Log.Infof("Response: %v", portResponse)
-	acc["ok"] = true
 
 	ports := make([]string, len(portResponse.Data))
 	for i, v := range portResponse.Data {
