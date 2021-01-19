@@ -181,6 +181,7 @@ func (e *Exec2) ProcessCommand(command string, acc telegraf.Accumulator, wg *syn
 	defer wg.Done()
 	_, isNagios := e.parser.(*nagios.NagiosParser)
 
+	e.Log.Infof("command:[%s]", command)
 	out, errbuf, runErr := e.runner.Run(command, e.Timeout.Duration)
 	if !isNagios && runErr != nil {
 		err := fmt.Errorf("exec2: %s for command '%s': %s", runErr, command, string(errbuf))
