@@ -111,7 +111,7 @@ func GetPid(serverName string) (string, error) {
 // 传入查询的端口号
 // 返回端口号对应的进程PID，若没有找到相关进程，返回-1
 func GetPidByPort(portNumber int) int {
-	cmdStr := fmt.Sprintf("netstat -anvp tcp|grep %d |awk '{print $9}'", portNumber) // mac
+	cmdStr := fmt.Sprintf("sudo netstat -anvp tcp|grep %d |awk '{print $9}'", portNumber) // mac
 	// cmdStr := fmt.Sprintf("netstat -anp|grep 45388|awk '{print $7}'|awk -F '/' '{print $1}'", portNumber) // linux
 	pid, err := RunCommand(cmdStr)
 	if err != nil {

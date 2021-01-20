@@ -181,7 +181,6 @@ func (e *Exec2) ProcessCommand(command string, acc telegraf.Accumulator, wg *syn
 	defer wg.Done()
 	_, isNagios := e.parser.(*nagios.NagiosParser)
 
-	e.Log.Infof("command:[%s]", command)
 	out, errbuf, runErr := e.runner.Run(command, e.Timeout.Duration)
 	if !isNagios && runErr != nil {
 		err := fmt.Errorf("exec2: %s for command '%s': %s", runErr, command, string(errbuf))
@@ -222,6 +221,14 @@ func (e *Exec2) addMetric(command string, metric telegraf.Metric, acc telegraf.A
 			metric.RemoveField(k)
 			metric.AddField(k, "0")
 		}
+
+		mValue := strings.Split(value, "\n")
+		if len(mValue) > 1 {
+			e.Log.Infof("multi value: %v", mValue)
+			metric.RemoveField(k)
+			metric.AddField(k, mValue[0])
+		}
+
 	}
 
 	acc.AddMetric(metric)
