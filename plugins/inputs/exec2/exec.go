@@ -374,7 +374,7 @@ func (e *Exec2) Close() error {
 }
 
 func (e *Exec2) Start(acc telegraf.Accumulator) error {
-	e.Log.Info("Service start called...")
+	e.Log.Infof("Service start called...")
 	return nil
 }
 

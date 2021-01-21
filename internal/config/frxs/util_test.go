@@ -16,3 +16,7 @@ func TestPortInUse(t *testing.T) {
 	pid := GetPidByPort(port)
 	t.Logf("Port [%d] in use, Pid : [%v]\n", port, pid)
 }
+
+func TestExport(t *testing.T) {
+	SetLocalHostEnvVariable("1.3.5.66")
+}

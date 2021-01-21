@@ -693,6 +693,16 @@ func (c *Config) LoadConfig(path string) error {
 		return fmt.Errorf("Error loading %s, %s", path, err)
 	}
 
+	// Set LOCAL_HOST env variable before parse config file
+	localHost, err := util.GetAvaliableLocalIP()
+	if err != nil {
+		return fmt.Errorf("Error get local host ip %s", err)
+	}
+	if !util.SetLocalHostEnvVariable(localHost) {
+		return fmt.Errorf("Error set $LOCAL_HOST")
+	}
+	// Set LOCAL_HOST env variable
+
 	tbl, err := parseConfig(data)
 	if err != nil {
 		return fmt.Errorf("Error parsing %s, %s", path, err)
@@ -733,12 +743,7 @@ func (c *Config) LoadConfig(path string) error {
 
 			c.Agent.Hostname = hostname
 		} else if c.Agent.UseLocalIPAsHost { // auto get localhost ip as hostname
-			hostname, err := util.GetAvaliableLocalIP()
-			if err != nil {
-				return err
-			}
-
-			c.Agent.Hostname = hostname
+			c.Agent.Hostname = localHost
 		}
 
 		c.Tags["host"] = c.Agent.Hostname

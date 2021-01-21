@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"os/exec"
 	"runtime"
 	"strconv"
@@ -120,4 +121,11 @@ func GetPidByPort(portNumber int) int {
 
 	processId, _ := strconv.Atoi(pid)
 	return processId
+}
+
+// SetLocalHostEnvVariable 使用 os 库的 Setenv 函数来设置的环境变量
+// 作用于整个进程的生命周期
+func SetLocalHostEnvVariable(ip string) bool {
+	err := os.Setenv("LOCAL_HOST", ip)
+	return err == nil
 }
