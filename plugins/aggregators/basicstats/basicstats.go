@@ -1,10 +1,9 @@
 package basicstats
 
 import (
-	"math"
-
 	"github.com/influxdata/telegraf"
 	"github.com/influxdata/telegraf/plugins/aggregators"
+	"math"
 )
 
 type BasicStats struct {
@@ -178,6 +177,14 @@ func (b *BasicStats) Push(acc telegraf.Accumulator) {
 				}
 				if b.statsConfig.diff {
 					fields[k+"_diff"] = v.diff
+					switch k {
+					case "read_bytes", "reads", "write_bytes_rate", "writes", "bytes_recv", "bytes_sent", "drop_in", "drop_out", "err_in", "err_out", "packets_recv", "packets_sent":
+						if _, exist := fields[k+"_count"]; exist && fields[k+"_count"].(float64) > 1 {
+							fields[k+"_rate"] = v.diff / ((fields[k+"_count"].(float64) - 1) * 10)
+						} else {
+							fields[k+"_rate"] = 0
+						}
+					}
 				}
 				if b.statsConfig.non_negative_diff && v.diff >= 0 {
 					fields[k+"_non_negative_diff"] = v.diff
