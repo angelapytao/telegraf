@@ -60,6 +60,7 @@ func (s *MemStats) Gather(acc telegraf.Accumulator) error {
 		"vmalloc_used":      vm.VMallocUsed,
 		"write_back":        vm.Writeback,
 		"write_back_tmp":    vm.WritebackTmp,
+		"free_percent":      100 * float64(vm.Free) / float64(vm.Total),
 	}
 	acc.AddGauge("mem", fields, nil)
 

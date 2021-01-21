@@ -75,6 +75,8 @@ func (s *CPUStats) Gather(acc telegraf.Accumulator) error {
 				"time_steal":      cts.Steal,
 				"time_guest":      cts.Guest,
 				"time_guest_nice": cts.GuestNice,
+				"time_other":      cts.Nice + cts.Softirq + cts.Irq + cts.Steal,
+				"time_total":      cts.System + cts.User + cts.Iowait + cts.Nice + cts.Softirq + cts.Irq + cts.Steal,
 			}
 			if s.ReportActive {
 				fieldsC["time_active"] = activeCpuTime(cts)
@@ -105,17 +107,31 @@ func (s *CPUStats) Gather(acc telegraf.Accumulator) error {
 			continue
 		}
 
+		userPercent := 100 * (cts.User - lastCts.User - (cts.Guest - lastCts.Guest)) / totalDelta
+		systemPercent := 100 * (cts.System - lastCts.System) / totalDelta
+		idlePercent := 100 * (cts.Idle - lastCts.Idle) / totalDelta
+		nicePercent := 100 * (cts.Nice - lastCts.Nice - (cts.GuestNice - lastCts.GuestNice)) / totalDelta
+		iowaitPercent := 100 * (cts.Iowait - lastCts.Iowait) / totalDelta
+		irqPercent := 100 * (cts.Irq - lastCts.Irq) / totalDelta
+		softirqPercent := 100 * (cts.Softirq - lastCts.Softirq) / totalDelta
+		stealPercent := 100 * (cts.Steal - lastCts.Steal) / totalDelta
+		guestPercent := 100 * (cts.Guest - lastCts.Guest) / totalDelta
+		guestNicePercent := 100 * (cts.GuestNice - lastCts.GuestNice) / totalDelta
+		otherPercent := nicePercent + softirqPercent + irqPercent + stealPercent
+		totalPercent := systemPercent + userPercent + iowaitPercent + otherPercent
 		fieldsG := map[string]interface{}{
-			"usage_user":       100 * (cts.User - lastCts.User - (cts.Guest - lastCts.Guest)) / totalDelta,
-			"usage_system":     100 * (cts.System - lastCts.System) / totalDelta,
-			"usage_idle":       100 * (cts.Idle - lastCts.Idle) / totalDelta,
-			"usage_nice":       100 * (cts.Nice - lastCts.Nice - (cts.GuestNice - lastCts.GuestNice)) / totalDelta,
-			"usage_iowait":     100 * (cts.Iowait - lastCts.Iowait) / totalDelta,
-			"usage_irq":        100 * (cts.Irq - lastCts.Irq) / totalDelta,
-			"usage_softirq":    100 * (cts.Softirq - lastCts.Softirq) / totalDelta,
-			"usage_steal":      100 * (cts.Steal - lastCts.Steal) / totalDelta,
-			"usage_guest":      100 * (cts.Guest - lastCts.Guest) / totalDelta,
-			"usage_guest_nice": 100 * (cts.GuestNice - lastCts.GuestNice) / totalDelta,
+			"usage_user":       userPercent,
+			"usage_system":     systemPercent,
+			"usage_idle":       idlePercent,
+			"usage_nice":       nicePercent,
+			"usage_iowait":     iowaitPercent,
+			"usage_irq":        irqPercent,
+			"usage_softirq":    softirqPercent,
+			"usage_steal":      stealPercent,
+			"usage_guest":      guestPercent,
+			"usage_guest_nice": guestNicePercent,
+			"usage_other":      otherPercent,
+			"usage_total":      totalPercent,
 		}
 		if s.ReportActive {
 			fieldsG["usage_active"] = 100 * (active - lastActive) / totalDelta

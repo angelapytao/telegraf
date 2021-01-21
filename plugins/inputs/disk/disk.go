@@ -73,6 +73,7 @@ func (s *DiskStats) Gather(acc telegraf.Accumulator) error {
 			"inodes_total": du.InodesTotal,
 			"inodes_free":  du.InodesFree,
 			"inodes_used":  du.InodesUsed,
+			"free_percent": 100 * float64(du.Free) / float64(du.Total),
 		}
 		acc.AddGauge("disk", fields, tags)
 	}
