@@ -47,10 +47,10 @@ CONFIGURATION_FILES = [
 
 # META-PACKAGE VARIABLES
 PACKAGE_LICENSE = "MIT"
-PACKAGE_URL = "https://github.com/influxdata/telegraf"
-MAINTAINER = "support@influxdb.com"
-VENDOR = "InfluxData"
-DESCRIPTION = "Plugin-driven server agent for reporting metrics into InfluxDB."
+PACKAGE_URL = "http://insight.xsyxsc.com/"
+MAINTAINER = "taopingying@xsyxsc.com"
+VENDOR = "Insight"
+DESCRIPTION = "Plugin-driven server agent for reporting metrics into Kafka."
 
 # SCRIPT START
 prereqs = [ 'git', 'go' ]

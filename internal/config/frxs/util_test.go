@@ -1,6 +1,7 @@
 package util
 
 import (
+	"os"
 	"testing"
 )
 
@@ -19,4 +20,7 @@ func TestPortInUse(t *testing.T) {
 
 func TestExport(t *testing.T) {
 	SetLocalHostEnvVariable("1.3.5.66")
+
+	env_val, _ := os.LookupEnv("LOCAL_HOST")
+	t.Logf("LOCAL_HOST: %s \n", env_val)
 }
