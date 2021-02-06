@@ -4,3 +4,4 @@
 /telegraf.gz
 /vendor
 /etc/telegraf-*.conf
+/.vscode
