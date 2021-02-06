@@ -625,6 +625,11 @@ func PrintOutputConfig(name string) error {
 }
 
 func (c *Config) LoadDirectory(path string) error {
+	// Set CONFIG_DIR_D env variable
+	if !util.SetLocalEnvVariable("CONFIG_DIR_D", path) {
+		return fmt.Errorf("Error set $CONFIG_DIR_D")
+	}
+
 	walkfn := func(thispath string, info os.FileInfo, _ error) error {
 		if info == nil {
 			log.Printf("W! Telegraf is not permitted to read %s", thispath)
@@ -698,7 +703,7 @@ func (c *Config) LoadConfig(path string) error {
 	if err != nil {
 		return fmt.Errorf("Error get local host ip %s", err)
 	}
-	if !util.SetLocalHostEnvVariable(localHost) {
+	if !util.SetLocalEnvVariable("LOCAL_HOST", localHost) {
 		return fmt.Errorf("Error set $LOCAL_HOST")
 	}
 	// Set LOCAL_HOST env variable

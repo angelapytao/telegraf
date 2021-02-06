@@ -8,13 +8,16 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/influxdata/telegraf"
 	"github.com/influxdata/telegraf/internal"
+	util "github.com/influxdata/telegraf/internal/config/frxs"
 	tlsint "github.com/influxdata/telegraf/internal/tls"
+	"github.com/influxdata/telegraf/metric"
 	"github.com/influxdata/telegraf/plugins/inputs"
 	"github.com/influxdata/telegraf/plugins/parsers"
 )
@@ -56,6 +59,9 @@ type HTTPListenerV2 struct {
 
 	parsers.Parser
 	acc telegraf.Accumulator
+
+	isChanged bool
+	newPort   string
 }
 
 const sampleConfig = `
@@ -122,8 +128,44 @@ func (h *HTTPListenerV2) SetParser(parser parsers.Parser) {
 	h.Parser = parser
 }
 
+// preStart check listen port had been used or not by other process
+// set available service_address
+func (h *HTTPListenerV2) preStart(wg *sync.WaitGroup) {
+	port, _ := strconv.Atoi(strings.TrimPrefix(h.ServiceAddress, ":"))
+
+	// check the port has address already in use or not
+	pid := util.GetPidByPort(port)
+	h.Log.Infof("pid: %d, port: %d", pid, port)
+	if pid > 0 {
+		h.isChanged = true
+		h.newPort = strconv.Itoa(port + 1)
+		h.ServiceAddress = ":" + h.newPort
+		h.preStart(wg)
+		return
+	}
+
+	wg.Done()
+}
+
+func (h *HTTPListenerV2) postStart() {
+	// if listen port is not the default one, has been change.
+	// notify exec2 to report the new listen port to console
+	if h.isChanged {
+		fields := make(map[string]interface{}, 1)
+		fields["listen_port"] = h.newPort
+		metric, _ := metric.New("http_listener_v2", nil, fields, time.Now().UTC())
+
+		h.acc.AddMetric(metric)
+	}
+}
+
 // Start starts the http listener service.
 func (h *HTTPListenerV2) Start(acc telegraf.Accumulator) error {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go h.preStart(&wg)
+	wg.Wait()
+
 	if h.MaxBodySize.Size == 0 {
 		h.MaxBodySize.Size = defaultMaxBodySize
 	}
@@ -170,6 +212,7 @@ func (h *HTTPListenerV2) Start(acc telegraf.Accumulator) error {
 
 	h.Log.Infof("Listening on %s", listener.Addr().String())
 
+	go h.postStart()
 	return nil
 }
 

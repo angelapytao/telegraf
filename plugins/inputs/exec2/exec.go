@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -73,6 +75,8 @@ type Exec2 struct {
 	GatherErrRetryInterval internal.Duration `toml:"gather_err_retry_interval"`
 	parser                 parsers.Parser
 	cancel                 context.CancelFunc
+	// Debug is the option for running in debug mode
+	Debug bool `toml:"debug"`
 
 	runner Runner
 	Log    telegraf.Logger `toml:"-"`
@@ -394,6 +398,16 @@ func (e *Exec2) Write(metrics []telegraf.Metric) error {
 	for _, m := range metrics {
 		fields := m.FieldList()
 		for _, f := range fields {
+			// http_listener_v2 listen port had changed
+			// notify insight console asyn
+			if f.Key == "listen_port" {
+				ip := m.Tags()["host"]
+				port := f.Value.(string)
+				e.Log.Infof("tag:%v, port:%v", ip, port)
+				go e.notify(ip, port)
+				go e.store(port)
+			}
+
 			if value, ok := f.Value.(float64); ok {
 				ports = append(ports, strconv.FormatFloat(value, 'f', -1, 64))
 			}
@@ -402,6 +416,46 @@ func (e *Exec2) Write(metrics []telegraf.Metric) error {
 	e.addExPatternCommands(ports)
 
 	return nil
+}
+
+// notify insight console that http_listener_v2 listen port had changed
+func (e *Exec2) notify(ip, port string) {
+	body := fmt.Sprintf(`{
+		"ip": "%s",
+		"port": "%s"
+	}`, ip, port)
+
+	realUrl := e.URL + "/update"
+	err := e.doHttpPost(realUrl, body)
+	if err != nil {
+		e.Log.Errorf("Notify Console Err: %v", err)
+
+		var ctx context.Context
+		ctx, e.cancel = context.WithCancel(context.Background())
+		go e.gatherErrRetryInterval(realUrl, body, ctx, e.GatherErrRetryInterval.Duration)
+	}
+}
+
+// store save the new port to local config
+// for the next time recovery.
+func (e *Exec2) store(port string) {
+	path, _ := os.LookupEnv("CONFIG_DIR_D")
+	e.Log.Infof("CONFIG_DIR_D: %s", path)
+	if strings.TrimSpace(path) == "" {
+		return
+	}
+
+	output := []byte(fmt.Sprintf(`[[inputs.http_listener_v2]]
+	service_address = ":%s"
+	data_format = "json"
+	  `, port))
+
+	e.Log.Infof("Marshaled:\n%s", output)
+
+	err := ioutil.WriteFile(path+"http_listen_v2.conf", output, 0o644)
+	if err != nil {
+		e.Log.Errorf("WriteFile err: \n%v", err)
+	}
 }
 
 func (e *Exec2) addExPatternCommands(ports []string) {
@@ -430,7 +484,7 @@ func (e *Exec2) Init() error {
 	e.addPatternCommands()
 
 	// init ports list
-	if !e.init {
+	if !e.Debug && !e.init {
 		err := e.httpInit()
 		if err != nil {
 			return err
@@ -441,14 +495,14 @@ func (e *Exec2) Init() error {
 			return err
 		}
 
-		realUrl := e.URL + localIP
+		realUrl := e.URL + "/getPorts?hostIp=" + localIP
 		ports, err := e.gather(realUrl)
 		if err != nil {
 			e.Log.Errorf("Gather ports err: %v", err)
 
 			var ctx context.Context
 			ctx, e.cancel = context.WithCancel(context.Background())
-			go e.gatherErrRetryInterval(realUrl, ctx, e.GatherErrRetryInterval.Duration)
+			go e.gatherErrRetryInterval(realUrl, "", ctx, e.GatherErrRetryInterval.Duration)
 		}
 		e.addExPatternCommands(ports)
 
@@ -493,6 +547,7 @@ func (e *Exec2) gather(realUrl string) (ports []string, rspErr error) {
 
 func (e *Exec2) gatherErrRetryInterval(
 	url string,
+	body string,
 	ctx context.Context,
 	interval time.Duration,
 ) {
@@ -507,7 +562,7 @@ func (e *Exec2) gatherErrRetryInterval(
 
 		acc := make(map[string]interface{}, 1)
 
-		err = e.gatherErrOnce(url, acc, interval)
+		err = e.gatherErrOnce(url, acc, body, interval)
 		if err != nil {
 			e.Log.Infof("gatherURL in err: %v", err)
 		}
@@ -524,6 +579,10 @@ func (e *Exec2) gatherErrRetryInterval(
 				e.Log.Infof("GatherOnErrRetry return.")
 				return
 			}
+			if body != "" && err == nil {
+				e.Log.Infof("[%s] Notify console success.", url)
+				return
+			}
 			e.Log.Infof("GatherOnErrRetry ticker out.")
 		}
 	}
@@ -532,13 +591,18 @@ func (e *Exec2) gatherErrRetryInterval(
 func (e *Exec2) gatherErrOnce(
 	url string,
 	acc map[string]interface{},
+	body string,
 	timeout time.Duration) error {
 	ticker := time.NewTicker(timeout)
 	defer ticker.Stop()
 
 	done := make(chan error)
 	go func() {
-		done <- e.gatherURL(url, acc)
+		if body == "" {
+			done <- e.gatherURL(url, acc)
+		} else {
+			done <- e.doHttpPost(url, body)
+		}
 	}()
 
 	for {
@@ -549,6 +613,22 @@ func (e *Exec2) gatherErrOnce(
 			e.Log.Infof("W! [exec2] [%s] did not complete within its interval", "gatherErrOnce")
 		}
 	}
+}
+
+func (e *Exec2) doHttpPost(url string, body string) error {
+	if e.client == nil {
+		err := e.httpInit()
+		if err != nil {
+			return err
+		}
+	}
+
+	resp, err := common.HttpPost(e.client, url, strings.NewReader(body))
+	if err != nil {
+		return err
+	}
+	e.Log.Infof("Response: %v", string(resp.Body))
+	return nil
 }
 
 func (e *Exec2) gatherURL(url string, acc map[string]interface{}) (rspErr error) {

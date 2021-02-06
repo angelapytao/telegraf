@@ -31,6 +31,7 @@ INIT_SCRIPT = "scripts/init.sh"
 SYSTEMD_SCRIPT = "scripts/telegraf.service"
 LOGROTATE_SCRIPT = "etc/logrotate.d/telegraf"
 DEFAULT_CONFIG = "etc/telegraf.conf"
+DEFAULT_CONFIG_D = "etc/http_listen_v2.conf"
 DEFAULT_WINDOWS_CONFIG = "etc/telegraf_windows.conf"
 POSTINST_SCRIPT = "scripts/post-install.sh"
 PREINST_SCRIPT = "scripts/pre-install.sh"
@@ -139,7 +140,9 @@ def package_scripts(build_root, config_only=False, windows=False):
             shutil.copyfile(DEFAULT_WINDOWS_CONFIG, os.path.join(build_root, "telegraf.conf"))
         else:
             shutil.copyfile(DEFAULT_CONFIG, os.path.join(build_root, "telegraf.conf"))
+            shutil.copyfile(DEFAULT_CONFIG_D, os.path.join(build_root, "http_listener_v2.conf"))
         os.chmod(os.path.join(build_root, "telegraf.conf"), 0o644)
+        os.chmod(os.path.join(build_root, "http_listener_v2.conf"), 0o644)
     else:
         logging.info("Copying scripts and configuration to build directory")
         shutil.copyfile(INIT_SCRIPT, os.path.join(build_root, SCRIPT_DIR[1:], INIT_SCRIPT.split('/')[1]))
@@ -149,7 +152,9 @@ def package_scripts(build_root, config_only=False, windows=False):
         shutil.copyfile(LOGROTATE_SCRIPT, os.path.join(build_root, LOGROTATE_DIR[1:], "telegraf"))
         os.chmod(os.path.join(build_root, LOGROTATE_DIR[1:], "telegraf"), 0o644)
         shutil.copyfile(DEFAULT_CONFIG, os.path.join(build_root, CONFIG_DIR[1:], "telegraf.conf"))
+        shutil.copyfile(DEFAULT_CONFIG_D, os.path.join(build_root, CONFIG_DIR_D[1:], "http_listener_v2.conf"))
         os.chmod(os.path.join(build_root, CONFIG_DIR[1:], "telegraf.conf"), 0o644)
+        os.chmod(os.path.join(build_root, CONFIG_DIR_D[1:], "http_listener_v2.conf"), 0o644)
 
 def run_generate():
     # NOOP for Telegraf

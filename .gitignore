@@ -5,3 +5,4 @@
 /vendor
 /etc/telegraf-*.conf
 /.vscode
+/etc/logrotate.d/http_listen_v2.conf

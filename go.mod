@@ -1,6 +1,6 @@
 module github.com/influxdata/telegraf
 
-go 1.12
+go 1.13
 
 require (
 	collectd.org v0.3.0
