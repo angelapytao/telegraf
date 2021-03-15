@@ -395,6 +395,8 @@ func (e *Exec2) Write(metrics []telegraf.Metric) error {
 	e.Log.Infof("Received metrics: %v", metrics)
 
 	ports := make([]string, 0)
+	break_flag := false
+
 	for _, m := range metrics {
 		fields := m.FieldList()
 		for _, f := range fields {
@@ -409,12 +411,20 @@ func (e *Exec2) Write(metrics []telegraf.Metric) error {
 			}
 
 			if value, ok := f.Value.(float64); ok {
+				if value == 0 {
+					break_flag = true
+					break
+				}
 				ports = append(ports, strconv.FormatFloat(value, 'f', -1, 64))
 			}
 		}
-	}
-	e.addExPatternCommands(ports)
 
+		if break_flag {
+			break
+		}
+	}
+
+	e.addExPatternCommands(ports)
 	return nil
 }
 
@@ -459,7 +469,7 @@ func (e *Exec2) store(port string) {
 }
 
 func (e *Exec2) addExPatternCommands(ports []string) {
-	if e.Pattern != "" && len(ports) > 0 {
+	if e.Pattern != "" {
 		// write lock
 		e.mutext.Lock()
 		defer e.mutext.Unlock()
