@@ -281,6 +281,9 @@ func (h *HTTPListenerV2) serveWrite(res http.ResponseWriter, req *http.Request) 
 			}
 		}
 
+		if len(m.Fields()) == 0 {
+			m.AddField("clear_port", "0")
+		}
 		h.acc.AddMetric(m)
 	}
 	res.WriteHeader(http.StatusOK)

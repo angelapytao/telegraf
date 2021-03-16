@@ -395,7 +395,6 @@ func (e *Exec2) Write(metrics []telegraf.Metric) error {
 	e.Log.Infof("Received metrics: %v", metrics)
 
 	ports := make([]string, 0)
-	break_flag := false
 
 	for _, m := range metrics {
 		fields := m.FieldList()
@@ -410,17 +409,14 @@ func (e *Exec2) Write(metrics []telegraf.Metric) error {
 				go e.store(port)
 			}
 
+			if f.Key == "clear_port" {
+				e.addExPatternCommands(make([]string, 0))
+				return nil
+			}
+
 			if value, ok := f.Value.(float64); ok {
-				if value == 0 {
-					break_flag = true
-					break
-				}
 				ports = append(ports, strconv.FormatFloat(value, 'f', -1, 64))
 			}
-		}
-
-		if break_flag {
-			break
 		}
 	}
 
