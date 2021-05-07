@@ -134,11 +134,11 @@ func (r *RunningOutput) Init() error {
 //
 // Takes ownership of metric
 func (ro *RunningOutput) AddMetric(metric telegraf.Metric) {
+
 	if ok := ro.Config.Filter.Select(metric); !ok {
 		ro.metricFiltered(metric)
 		return
 	}
-
 	ro.Config.Filter.Modify(metric)
 	if len(metric.FieldList()) == 0 {
 		ro.metricFiltered(metric)
@@ -194,12 +194,12 @@ func (ro *RunningOutput) Write() error {
 	// writing will be sent on the next call.
 	nBuffer := ro.buffer.Len()
 	nBatches := nBuffer/ro.MetricBatchSize + 1
+
 	for i := 0; i < nBatches; i++ {
 		batch := ro.buffer.Batch(ro.MetricBatchSize)
 		if len(batch) == 0 {
 			break
 		}
-
 		err := ro.write(batch)
 		if err != nil {
 			ro.buffer.Reject(batch)
@@ -241,7 +241,6 @@ func (r *RunningOutput) write(metrics []telegraf.Metric) error {
 		r.log.Warnf("Metric buffer overflow; %d metrics have been dropped", dropped)
 		atomic.StoreInt64(&r.droppedMetrics, 0)
 	}
-
 	start := time.Now()
 	err := r.Output.Write(metrics)
 	elapsed := time.Since(start)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -576,6 +577,9 @@ func (a *Agent) flush(
 
 		select {
 		case <-ticker.C:
+			if strings.Contains(output.Output.Description(),"Kafka2") {
+				fmt.Println("rrrrrrrrrrrrrrrrrrrrrrrrr")
+			}
 			logError(a.flushOnce(output, interval, output.Write))
 		case <-output.BatchReady:
 			// Favor the ticker over batch ready
@@ -586,6 +590,7 @@ func (a *Agent) flush(
 				logError(a.flushOnce(output, interval, output.WriteBatch))
 			}
 		case <-ctx.Done():
+			fmt.Println("uuuuuuuuuuuuuuuuuuuuuuuuuuuu")
 			logError(a.flushOnce(output, interval, output.Write))
 			return
 		}

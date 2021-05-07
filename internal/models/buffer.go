@@ -165,7 +165,13 @@ func (b *Buffer) Batch(batchSize int) []telegraf.Metric {
 
 	batchIndex := b.batchFirst
 	for i := range out {
-		out[len(out)-1-i] = b.buf[batchIndex]
+		if b.buf[batchIndex]!=nil&&b.buf[batchIndex].Name()=="log"{
+			//log插件按正常时间先后顺序提取
+			out[i] = b.buf[batchIndex]
+		}else{
+			out[len(out)-1-i] = b.buf[batchIndex]
+		}
+
 		b.buf[batchIndex] = nil
 		batchIndex = b.next(batchIndex)
 	}

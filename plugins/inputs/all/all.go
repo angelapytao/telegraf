@@ -9,6 +9,7 @@ import (
 	_ "github.com/influxdata/telegraf/plugins/inputs/http_listener_v2"
 	_ "github.com/influxdata/telegraf/plugins/inputs/internal"
 	_ "github.com/influxdata/telegraf/plugins/inputs/linux_sysctl_fs"
+	_ "github.com/influxdata/telegraf/plugins/inputs/log"
 	_ "github.com/influxdata/telegraf/plugins/inputs/mem"
 	_ "github.com/influxdata/telegraf/plugins/inputs/net"
 	_ "github.com/influxdata/telegraf/plugins/inputs/nstat"

@@ -100,11 +100,9 @@ func (f *Filter) Select(metric telegraf.Metric) bool {
 	if !f.isActive {
 		return true
 	}
-
 	if !f.shouldNamePass(metric.Name()) {
 		return false
 	}
-
 	if !f.shouldTagsPass(metric.TagList()) {
 		return false
 	}

@@ -2,6 +2,7 @@ package serializers
 
 import (
 	"fmt"
+	"github.com/influxdata/telegraf/plugins/serializers/log"
 	"time"
 
 	"github.com/influxdata/telegraf"
@@ -61,6 +62,8 @@ func NewSerializer(config *Config) (Serializer, error) {
 		serializer, err = NewDruidSerializer(config.TimestampUnits)
 	case "nowmetric":
 		serializer, err = NewNowSerializer()
+	case "log":
+		serializer, err = NewLogSerializer()
 	default:
 		err = fmt.Errorf("Invalid data format: %s", config.DataFormat)
 	}
@@ -77,4 +80,8 @@ func NewDruidSerializer(timestampUnits time.Duration) (Serializer, error) {
 
 func NewNowSerializer() (Serializer, error) {
 	return nowmetric.NewSerializer()
+}
+
+func NewLogSerializer()(Serializer, error){
+	return log.NewSerializer()
 }
