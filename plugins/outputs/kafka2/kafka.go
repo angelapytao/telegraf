@@ -3,10 +3,12 @@ package kafka2
 import (
 	"crypto/tls"
 	"fmt"
-	"github.com/influxdata/telegraf/plugins/common/store"
 	"log"
+	"regexp"
 	"strings"
 	"time"
+
+	"github.com/influxdata/telegraf/plugins/common/store"
 
 	"github.com/pkg/errors"
 
@@ -77,8 +79,11 @@ type (
 		Separator string   `toml:"separator"`
 	}
 	LogBrokers struct {
-		Name    string   `toml:"name"`
-		Brokers []string `toml:"brokers"`
+		Name    string   `toml:"name"` //日志名称
+		Brokers []string `toml:"brokers"` //kafka服务器列表
+		TopicFilterReg string  `toml:"topic_filter_reg"` //从message中提取topic的正则表达式
+		TopicFilterNo  int     `toml:"topic_filter_no"` //根据正则表达式提取了多个结果，第几个才是最终的topic
+		TopicFilterDelPreSuf bool `toml:"topic_filter_del_pre_suf"` //是否去掉提取的topic的首尾字符
 	}
 )
 
@@ -392,11 +397,11 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 			k.Log.Debugf("Could not serialize metric: %v", err)
 			continue
 		}
-		fileName, ok := metric.GetField("file_name")
+		fileName, ok := metric.GetField("file_path")
 		if !ok {
-			return errors.New("file_name为空！")
+			return errors.New("file_path为空！")
 		}
-		logName, ok := metric.GetField("log_name")
+		_logName, ok := metric.GetField("log_name")
 		if !ok {
 			return errors.New("log_name为空！")
 		}
@@ -404,7 +409,12 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 		if !ok {
 			return errors.New("offset为空！")
 		}
-		topic := logName.(string)
+		logName := _logName.(string)
+		topic,err:=k.fetchTopic(logName,string(buf))
+		if err!=nil{
+			fmt.Println(err)
+			return err
+		}
 		m := &sarama.ProducerMessage{
 			Topic: topic,
 			Value: sarama.ByteEncoder(buf),
@@ -424,9 +434,11 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 			m.Key = sarama.StringEncoder(key)
 		}
 
-		_, _, prodErr := k.producers[topic].SendMessage(m)
-		fmt.Println("send------------",topic,string(buf),offset)
-		if prodErr!=nil {
+		_, _, prodErr := k.producers[logName].SendMessage(m)
+		//fmt.Println("prodErr------------",prodErr )
+		//fmt.Println("topic------------",topic )
+		fmt.Println("send------------",  string(buf), offset)
+		if prodErr != nil {
 			errP := prodErr.(*sarama.ProducerError)
 			if errP.Err == sarama.ErrMessageSizeTooLarge {
 				k.Log.Error("Message too large, consider increasing `max_message_bytes`; dropping batch")
@@ -438,15 +450,15 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 			}
 			return errP
 		}
-		_fileName:=fileName.(string)
-		logOffsetDto,ok:=store.MapLogOffset[_fileName]
-		if !ok{
-			logOffsetDto=new(store.LogOffset)
-			logOffsetDto.FileName= _fileName+".offset"
-			store.MapLogOffset[_fileName]=logOffsetDto
+		_fileName := fileName.(string)
+		logOffsetDto, ok := store.MapLogOffset[_fileName]
+		if !ok {
+			logOffsetDto = new(store.LogOffset)
+			logOffsetDto.FileName = _fileName + ".offset"
+			store.MapLogOffset[_fileName] = logOffsetDto
 		}
-		err=logOffsetDto.Set(offset.(int64))
-		if err!=nil{
+		err = logOffsetDto.Set(offset.(int64))
+		if err != nil {
 			return err
 		}
 	}
@@ -455,15 +467,42 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 
 func (k *Kafka2) createProducer(config *sarama.Config) error {
 	k.producers = make(map[string]sarama.SyncProducer)
-		for _, v := range k.LogBrokers {
-			producer, err := k.producerFunc(v.Brokers, config)
-			if err != nil {
-				return err
-			}
-			k.producers[v.Name] = producer
+	for _, v := range k.LogBrokers {
+		producer, err := k.producerFunc(v.Brokers, config)
+		if err != nil {
+			return err
 		}
+		k.producers[v.Name] = producer
+	}
 
 	return nil
+}
+
+func (k *Kafka2) fetchTopic(name,msg string)(string,error){
+	b:=new(LogBrokers)
+	for _,l:=range k.LogBrokers{
+		if l.Name==name{
+			b=&l
+			break
+		}
+	}
+	if b==nil{
+		return "",errors.New(name+"没有匹配的配置节点，请检查[[outputs.kafka2.log_brokers]]")
+	}
+	if b.TopicFilterReg==""{
+		return b.Name,nil
+	}
+	reg  := regexp.MustCompile(b.TopicFilterReg)
+	r := reg.FindAllString(msg, -1)
+	if b.TopicFilterNo>=len(r){
+		return "",errors.New("解析message中的topic出错，索引超出数组界限！请检查配置参数：topic_filter_reg和topic_filter_no")
+	}
+	topic:=r[b.TopicFilterNo]
+	if b.TopicFilterDelPreSuf{
+		topic=topic[1:]
+		topic=topic[0:len(topic)-1]
+	}
+	return topic,nil
 }
 
 func init() {

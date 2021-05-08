@@ -60,18 +60,18 @@ func (m *Multiline) IsEnabled() bool {
 
 func (m *Multiline) ProcessLine(text string, buffer *bytes.Buffer) string {
 	if m.matchString(text) {
-		buffer.WriteString(text)
+		buffer.WriteString(text+`\r\n`)
 		return ""
 	}
 	if m.config.MatchWhichLine == Previous {
 		previousText := buffer.String()
 		buffer.Reset()
-		buffer.WriteString(text)
+		buffer.WriteString(text )
 		text = previousText
 	} else {
 		// Next
 		if buffer.Len() > 0 {
-			buffer.WriteString(text)
+			buffer.WriteString(text )
 			text = buffer.String()
 			buffer.Reset()
 		}

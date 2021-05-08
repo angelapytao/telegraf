@@ -7,11 +7,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/influxdata/telegraf/plugins/common/store"
 	"io"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/influxdata/telegraf/plugins/common/store"
 
 	"github.com/influxdata/telegraf/metric"
 
@@ -38,14 +39,14 @@ type empty struct{}
 type semaphore chan empty
 
 type Log struct {
-	Files               []string `toml:"files"`
-	FromBeginning       bool     `toml:"from_beginning"`
-	Pipe                bool     `toml:"pipe"`
-	WatchMethod         string   `toml:"watch_method"`
-	MaxUndeliveredLines int      `toml:"max_undelivered_lines"`
-	CharacterEncoding   string   `toml:"character_encoding"`
-	PathTag             string   `toml:"path_tag"`
-	Regexp              []RegexpConfig   `toml:"regexp"`
+	Files               []string       `toml:"files"`
+	FromBeginning       bool           `toml:"from_beginning"`
+	Pipe                bool           `toml:"pipe"`
+	WatchMethod         string         `toml:"watch_method"`
+	MaxUndeliveredLines int            `toml:"max_undelivered_lines"`
+	CharacterEncoding   string         `toml:"character_encoding"`
+	PathTag             string         `toml:"path_tag"`
+	Regexp              []RegexpConfig `toml:"regexp"`
 
 	Log        telegraf.Logger `toml:"-"`
 	tailers    map[string]*Tail
@@ -238,15 +239,15 @@ func (t *Log) tailNewFiles(fromBeginning bool) error {
 		for {
 			file := <-ch1
 
-			logOffset:=new(store.LogOffset)
-			logOffset.FileName= file+".offset"
-			offset,err:=logOffset.Get()
-			if err!=nil{
-				fmt.Println("获取文件"+logOffset.FileName+" 偏移量出错",err.Error())
-				t.Log.Error("获取文件"+logOffset.FileName+" 偏移量出错",err.Error())
+			logOffset := new(store.LogOffset)
+			logOffset.FileName = file + ".offset"
+			offset, err := logOffset.Get()
+			if err != nil {
+				fmt.Println("获取文件"+logOffset.FileName+" 偏移量出错", err.Error())
+				t.Log.Error("获取文件"+logOffset.FileName+" 偏移量出错", err.Error())
 				return
 			}
-			store.MapLogOffset[logOffset.FileName]=logOffset
+			store.MapLogOffset[logOffset.FileName] = logOffset
 
 			var seek *SeekInfo
 			if !t.Pipe && !fromBeginning {
@@ -264,7 +265,7 @@ func (t *Log) tailNewFiles(fromBeginning bool) error {
 				//	}
 				//}
 				seek = &SeekInfo{
-					Whence: 0,//SEEK_SET int = 0 ,seek relative to the origin of the file
+					Whence: 0, //SEEK_SET int = 0 ,seek relative to the origin of the file
 					Offset: offset,
 				}
 			}
@@ -386,13 +387,13 @@ func (t *Log) watchNewFiles(ch chan string) {
 //	}
 //}
 
-func parseLine2(fileName,metricName, logName string, text string, offset int64) ([]telegraf.Metric, error) {
+func parseLine2(fileName, metricName, logName string, text string, offset int64) ([]telegraf.Metric, error) {
 	metrics := make([]telegraf.Metric, 0)
 	fields := make(map[string]interface{})
 	fields["message"] = text
 	fields["offset"] = offset
 	fields["log_name"] = logName
-	fields["file_name"] = fileName
+	fields["file_path"] = fileName
 	m, err := metric.New(metricName, map[string]string{}, fields, time.Now())
 	if err != nil {
 		return nil, err
@@ -439,11 +440,11 @@ func (t *Log) receiver(tailer *Tail) {
 			if !tailerOpen {
 				channelOpen = false
 			}
-			if line!=nil{
-				_offset=line.Offset
+			if line != nil {
+				_offset = line.Offset
 			}
 		case <-timeout:
-			_offset=tailer.LastOffset
+			_offset = tailer.LastOffset
 		}
 
 		var text string
@@ -465,7 +466,7 @@ func (t *Log) receiver(tailer *Tail) {
 				continue
 			}
 		}
-		if line==nil&&text==""{
+		if line == nil && text == "" {
 			continue
 		}
 		if line != nil && line.Err != nil {
@@ -473,15 +474,15 @@ func (t *Log) receiver(tailer *Tail) {
 			continue
 		}
 		logName := getLogName(text, t.regexpConfig[tailer.Filename])
-		fmt.Println("tailer.Filename:",tailer.Filename, t.regexpConfig[tailer.Filename])
+		fmt.Println("tailer.Filename:", tailer.Filename, t.regexpConfig[tailer.Filename])
 		if logName == "" {
-			fmt.Println(tailer.Filename,"日志行无匹配的正则表达式:", text)
+			fmt.Println(tailer.Filename, "日志行无匹配的正则表达式:", text)
 			continue
-		}else{
-			fmt.Println(tailer.Filename,"匹配到新的日志",logName, text)
+		} else {
+			fmt.Println(tailer.Filename, "匹配到新的日志", logName, text)
 		}
 
-		metrics, err := parseLine2(tailer.Filename,"log", logName, text, _offset)
+		metrics, err := parseLine2(tailer.Filename, "log", logName, text, _offset)
 		if err != nil {
 			t.Log.Errorf("Malformed log line in %q: [%q]: %s",
 				tailer.Filename, text, err.Error())
