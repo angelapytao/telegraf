@@ -11,12 +11,13 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/influxdata/tail/ratelimiter"
-	"github.com/influxdata/tail/util"
+	//"github.com/influxdata/tail/util"
 	"github.com/influxdata/tail/watch"
 	"gopkg.in/tomb.v1"
 )
@@ -106,7 +107,8 @@ var (
 // `Lines` channel.
 func TailFile(filename string,  config Config) (*Tail, error) {
 	if config.ReOpen && !config.Follow {
-		util.Fatal("cannot set ReOpen without Follow.")
+		//util.Fatal("cannot set ReOpen without Follow.")
+		Fatal("cannot set ReOpen without Follow.")
 	}
 
 	t := &Tail{
@@ -447,7 +449,8 @@ func (tail *Tail) sendLine(line string, offset int64) bool {
 
 	// Split longer lines
 	if tail.MaxLineSize > 0 && len(line) > tail.MaxLineSize {
-		lines = util.PartitionString(line, tail.MaxLineSize)
+		//lines = util.PartitionString(line, tail.MaxLineSize)
+		lines = PartitionString(line, tail.MaxLineSize)
 	}
 
 	for _, line := range lines {
@@ -471,4 +474,46 @@ func (tail *Tail) sendLine(line string, offset int64) bool {
 // automatically remove inotify watches after the process exits.
 func (tail *Tail) Cleanup() {
 	watch.Cleanup(tail.Filename)
+}
+
+type Logger struct {
+	*log.Logger
+}
+
+var LOGGER = &Logger{log.New(os.Stderr, "", log.LstdFlags)}
+
+// fatal is like panic except it displays only the current goroutine's stack.
+func Fatal(format string, v ...interface{}) {
+	// https://github.com/hpcloud/log/blob/master/log.go#L45
+	LOGGER.Output(2, fmt.Sprintf("FATAL -- "+format, v...)+"\n"+string(debug.Stack()))
+	os.Exit(1)
+}
+
+// partitionString partitions the string into chunks of given size,
+// with the last chunk of variable size.
+func PartitionString(s string, chunkSize int) []string {
+	if chunkSize <= 0 {
+		panic("invalid chunkSize")
+	}
+	length := len(s)
+	chunks := 1 + length/chunkSize
+	start := 0
+	end := chunkSize
+	parts := make([]string, 0, chunks)
+	for {
+		if end > length {
+			end = length
+		}
+		subLine:=s[start:end]
+		//在新截取的日志行前增加空格（多行匹配的正则表达式，这里暂时写死为空格），利用multiline的逻辑追加为多行类型的日志；否则将导致该行无法匹配正则表达式而丢失
+		if start>0{
+			subLine=" "+subLine
+		}
+		parts = append(parts, subLine)
+		if end == length {
+			break
+		}
+		start, end = end, end+chunkSize
+	}
+	return parts
 }

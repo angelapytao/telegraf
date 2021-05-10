@@ -474,12 +474,10 @@ func (t *Log) receiver(tailer *Tail) {
 			continue
 		}
 		logName := getLogName(text, t.regexpConfig[tailer.Filename])
-		fmt.Println("tailer.Filename:", tailer.Filename, t.regexpConfig[tailer.Filename])
+		// fmt.Println("tailer.Filename:", tailer.Filename, t.regexpConfig[tailer.Filename])
 		if logName == "" {
-			fmt.Println(tailer.Filename, "日志行无匹配的正则表达式:", text)
+			//fmt.Println(tailer.Filename, "日志行无匹配的正则表达式:", text)
 			continue
-		} else {
-			fmt.Println(tailer.Filename, "匹配到新的日志", logName, text)
 		}
 
 		metrics, err := parseLine2(tailer.Filename, "log", logName, text, _offset)

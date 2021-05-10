@@ -79,11 +79,11 @@ type (
 		Separator string   `toml:"separator"`
 	}
 	LogBrokers struct {
-		Name    string   `toml:"name"` //日志名称
-		Brokers []string `toml:"brokers"` //kafka服务器列表
-		TopicFilterReg string  `toml:"topic_filter_reg"` //从message中提取topic的正则表达式
-		TopicFilterNo  int     `toml:"topic_filter_no"` //根据正则表达式提取了多个结果，第几个才是最终的topic
-		TopicFilterDelPreSuf bool `toml:"topic_filter_del_pre_suf"` //是否去掉提取的topic的首尾字符
+		Name                 string   `toml:"name"`                     //日志名称
+		Brokers              []string `toml:"brokers"`                  //kafka服务器列表
+		TopicFilterReg       string   `toml:"topic_filter_reg"`         //从message中提取topic的正则表达式
+		TopicFilterNo        int      `toml:"topic_filter_no"`          //根据正则表达式提取了多个结果，第几个才是最终的topic
+		TopicFilterDelPreSuf bool     `toml:"topic_filter_del_pre_suf"` //是否去掉提取的topic的首尾字符
 	}
 )
 
@@ -409,12 +409,26 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 		if !ok {
 			return errors.New("offset为空！")
 		}
+		topic:=""
 		logName := _logName.(string)
-		topic,err:=k.fetchTopic(logName,string(buf))
-		if err!=nil{
-			fmt.Println(err)
-			return err
+		_topic, ok := metric.GetField("topic")
+		if  ok {
+			topic=_topic.(string)
+			if topic==""{
+				return errors.New("metric中的topic字段为空！")
+			}
+		}else{
+			//如果metric中缺少topic字段，则根据配置文件从message中提取
+			topic, err = k.fetchTopic(logName, string(buf))
+			if err != nil {
+				fmt.Println("metric中缺少topic字段，并且在message中提取topic失败！",err)
+				return errors.New("metric中缺少topic字段！"+err.Error())
+			}
+			if topic==""{
+				return errors.New("metric中缺少topic字段，并且在message中提取topic失败！")
+			}
 		}
+
 		m := &sarama.ProducerMessage{
 			Topic: topic,
 			Value: sarama.ByteEncoder(buf),
@@ -437,7 +451,7 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 		_, _, prodErr := k.producers[logName].SendMessage(m)
 		//fmt.Println("prodErr------------",prodErr )
 		//fmt.Println("topic------------",topic )
-		fmt.Println("send------------",  string(buf), offset)
+		//fmt.Println("send------------",  string(buf), offset)
 		if prodErr != nil {
 			errP := prodErr.(*sarama.ProducerError)
 			if errP.Err == sarama.ErrMessageSizeTooLarge {
@@ -478,31 +492,31 @@ func (k *Kafka2) createProducer(config *sarama.Config) error {
 	return nil
 }
 
-func (k *Kafka2) fetchTopic(name,msg string)(string,error){
-	b:=new(LogBrokers)
-	for _,l:=range k.LogBrokers{
-		if l.Name==name{
-			b=&l
+func (k *Kafka2) fetchTopic(name, msg string) (string, error) {
+	b := new(LogBrokers)
+	for _, l := range k.LogBrokers {
+		if l.Name == name {
+			b = &l
 			break
 		}
 	}
-	if b==nil{
-		return "",errors.New(name+"没有匹配的配置节点，请检查[[outputs.kafka2.log_brokers]]")
+	if b == nil {
+		return "", errors.New(name + "没有匹配的配置节点，请检查[[outputs.kafka2.log_brokers]]")
 	}
-	if b.TopicFilterReg==""{
-		return b.Name,nil
+	if b.TopicFilterReg == "" {
+		return b.Name, nil
 	}
-	reg  := regexp.MustCompile(b.TopicFilterReg)
+	reg := regexp.MustCompile(b.TopicFilterReg)
 	r := reg.FindAllString(msg, -1)
-	if b.TopicFilterNo>=len(r){
-		return "",errors.New("解析message中的topic出错，索引超出数组界限！请检查配置参数：topic_filter_reg和topic_filter_no")
+	if b.TopicFilterNo >= len(r) {
+		return "", errors.New("解析message中的topic出错，索引超出数组界限！请检查配置参数：topic_filter_reg和topic_filter_no")
 	}
-	topic:=r[b.TopicFilterNo]
-	if b.TopicFilterDelPreSuf{
-		topic=topic[1:]
-		topic=topic[0:len(topic)-1]
+	topic := r[b.TopicFilterNo]
+	if b.TopicFilterDelPreSuf {
+		topic = topic[1:]
+		topic = topic[0 : len(topic)-1]
 	}
-	return topic,nil
+	return topic, nil
 }
 
 func init() {
