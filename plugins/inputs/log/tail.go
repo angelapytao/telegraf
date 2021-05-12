@@ -81,8 +81,8 @@ type Tail struct {
 	Lines    chan *Line
 	Config
 	RegItems []RegexpItem
-	file   *os.File
-	reader *bufio.Reader
+	file     *os.File
+	reader   *bufio.Reader
 
 	watcher watch.FileWatcher
 	changes *watch.FileChanges
@@ -105,7 +105,7 @@ var (
 // via the `Tail.Lines` channel. To handle errors during tailing,
 // invoke the `Wait` or `Err` method after finishing reading from the
 // `Lines` channel.
-func TailFile(filename string,  config Config) (*Tail, error) {
+func TailFile(filename string, config Config) (*Tail, error) {
 	if config.ReOpen && !config.Follow {
 		//util.Fatal("cannot set ReOpen without Follow.")
 		Fatal("cannot set ReOpen without Follow.")
@@ -149,7 +149,7 @@ func (tail *Tail) Tell() (offset int64, err error) {
 	if tail.file == nil {
 		return
 	}
-	offset, err = tail.file.Seek(0,os.SEEK_CUR)
+	offset, err = tail.file.Seek(0, os.SEEK_CUR)
 	if err != nil {
 		return
 	}
@@ -162,8 +162,6 @@ func (tail *Tail) Tell() (offset int64, err error) {
 	offset -= int64(tail.reader.Buffered())
 	return
 }
-
-
 
 // Stop stops the tailing activity.
 func (tail *Tail) Stop() error {
@@ -247,7 +245,6 @@ func (tail *Tail) tailFileSync() {
 
 	// Seek to requested location on first open of the file.
 	if tail.Location != nil {
-		fmt.Println("xxxxxxxxxxxxxxxxxxxxxxxxxx",tail.Location.Offset, tail.Location.Whence)
 		_, err := tail.file.Seek(tail.Location.Offset, tail.Location.Whence)
 		tail.Logger.Printf("Seeked %s - %+v\n", tail.Filename, tail.Location)
 		if err != nil {
@@ -263,13 +260,13 @@ func (tail *Tail) tailFileSync() {
 		return
 	}
 
-	var offset int64=-1
+	var offset int64 = -1
 	var err error
 
 	// Read line by line.
 	for {
 		// do not seek in named pipes
-		if !tail.Pipe&&offset>-1 {
+		if !tail.Pipe && offset > -1 {
 			// grab the position in case we need to back up in the event of a half-line
 			offset, err = tail.Tell()
 			if err != nil {
@@ -277,8 +274,8 @@ func (tail *Tail) tailFileSync() {
 				return
 			}
 		}
-		if offset==-1{
-			offset=tail.Location.Offset
+		if offset == -1 {
+			offset = tail.Location.Offset
 		}
 
 		line, err := tail.readLine()
@@ -302,15 +299,14 @@ func (tail *Tail) tailFileSync() {
 					return
 				}
 			}
-		} else if err == io.EOF {//当文件指针读取到文件末尾
-			tail.LastOffset=offset
+		} else if err == io.EOF { //当文件指针读取到文件末尾
+			tail.LastOffset = offset
 			if !tail.Follow {
 				if line != "" {
 					tail.sendLine(line, offset)
 				}
 				return
 			}
-
 			if tail.Follow && line != "" {
 				// this has the potential to never return the last line if
 				// it's not followed by a newline; seems a fair trade here
@@ -320,7 +316,6 @@ func (tail *Tail) tailFileSync() {
 					return
 				}
 			}
-
 			// When EOF is reached, wait for more data to become
 			// available. Wait strategy is based on the `tail.watcher`
 			// implementation (inotify or polling).
@@ -331,7 +326,8 @@ func (tail *Tail) tailFileSync() {
 				}
 				return
 			}
-			err  = tail.seekTo(SeekInfo{Offset: offset, Whence: 0})
+			//err = tail.seekTo(SeekInfo{Offset: offset, Whence: 0})
+			err = tail.seekTo(SeekInfo{Offset: tail.LastOffset, Whence: 0})
 			if err != nil {
 				tail.Kill(err)
 				return
@@ -384,6 +380,7 @@ func (tail *Tail) waitForChanges() error {
 	case <-tail.changes.Deleted:
 		tail.changes = nil
 		if tail.ReOpen {
+			tail.LastOffset=0//文件删除后重新打开，将offset设置为0（文件开头）
 			// XXX: we must not log from a library.
 			tail.Logger.Printf("Re-opening moved/deleted file %s ...", tail.Filename)
 			if err := tail.reopen(); err != nil {
@@ -397,6 +394,7 @@ func (tail *Tail) waitForChanges() error {
 			return ErrStop
 		}
 	case <-tail.changes.Truncated:
+		tail.LastOffset=0//文件Truncated后重新打开，将offset设置为0（文件开头）
 		// Always reopen truncated files (Follow is true)
 		tail.Logger.Printf("Re-opening truncated file %s ...", tail.Filename)
 		if err := tail.reopen(); err != nil {
@@ -504,10 +502,10 @@ func PartitionString(s string, chunkSize int) []string {
 		if end > length {
 			end = length
 		}
-		subLine:=s[start:end]
+		subLine := s[start:end]
 		//在新截取的日志行前增加空格（多行匹配的正则表达式，这里暂时写死为空格），利用multiline的逻辑追加为多行类型的日志；否则将导致该行无法匹配正则表达式而丢失
-		if start>0{
-			subLine=" "+subLine
+		if start > 0 {
+			subLine = " " + subLine
 		}
 		parts = append(parts, subLine)
 		if end == length {

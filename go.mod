@@ -20,6 +20,7 @@ require (
 	github.com/influxdata/tail v1.0.1-0.20200707181643-03a791b270e4
 	github.com/influxdata/toml v0.0.0-20190415235208-270119a8ce65
 	github.com/influxdata/wlog v0.0.0-20160411224016-7c63b0a71ef8
+	github.com/json-iterator/go v1.1.11
 	github.com/kardianos/service v1.2.0
 	github.com/karrick/godirwalk v1.16.1
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51

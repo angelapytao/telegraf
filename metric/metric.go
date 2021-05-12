@@ -2,6 +2,8 @@ package metric
 
 import (
 	"fmt"
+	"github.com/influxdata/telegraf/plugins/common/store"
+	jsoniter "github.com/json-iterator/go"
 	"hash/fnv"
 	"sort"
 	"time"
@@ -109,6 +111,15 @@ func (m *metric) TagList() []*telegraf.Tag {
 func (m *metric) Fields() map[string]interface{} {
 	fields := make(map[string]interface{}, len(m.fields))
 	for _, field := range m.fields {
+		//定制Log字段反序列化
+		if  field.Key=="log"{
+			logDto:=new(store.LogDto)
+			err:=jsoniter.Unmarshal([]byte(field.Value.(string)),&logDto)
+			if err==nil{
+				fields[field.Key] =logDto
+				continue
+			}
+		}
 		fields[field.Key] = field.Value
 	}
 

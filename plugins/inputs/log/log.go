@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	jsoniter "github.com/json-iterator/go"
 	"io"
 	"strings"
 	"sync"
@@ -33,6 +34,7 @@ const (
 var (
 	offsets      = make(map[string]int64)
 	offsetsMutex = new(sync.Mutex)
+	json = jsoniter.ConfigCompatibleWithStandardLibrary
 )
 
 type empty struct{}
@@ -223,18 +225,6 @@ func (t *Log) tailNewFiles(fromBeginning bool) error {
 
 	go t.watchNewFiles(ch) //监控是否有新的日志文件生成
 
-	// Create a "tailer" for each file
-	//for _, filepath := range t.Files {
-	//	g, err := globpath.Compile(filepath)
-	//	if err != nil {
-	//		t.Log.Errorf("Glob %q failed to compile: %s", filepath, err.Error())
-	//	}
-	//	for _, file := range g.Match() {
-	//		if _, ok := t.tailers[file]; ok {
-	//			// we're already tailing this file
-	//			continue
-	//		}
-
 	go func(ch1 chan string) {
 		for {
 			file := <-ch1
@@ -250,7 +240,13 @@ func (t *Log) tailNewFiles(fromBeginning bool) error {
 			store.MapLogOffset[logOffset.FileName] = logOffset
 
 			var seek *SeekInfo
-			if !t.Pipe && !fromBeginning {
+
+			 seek = &SeekInfo{
+				Whence: 0, //SEEK_SET int = 0 ,seek relative to the origin of the file
+				Offset: offset,
+			  }
+
+			    //if !t.Pipe && !fromBeginning {
 				//if offset, ok := t.offsets[file]; ok {
 				//	t.Log.Debugf("Using offset %d for %q", offset, file)
 				//if offset==0{
@@ -264,11 +260,7 @@ func (t *Log) tailNewFiles(fromBeginning bool) error {
 				//		Offset: 0,
 				//	}
 				//}
-				seek = &SeekInfo{
-					Whence: 0, //SEEK_SET int = 0 ,seek relative to the origin of the file
-					Offset: offset,
-				}
-			}
+			    //}
 
 			tailer, err := TailFile(file,
 				Config{
@@ -350,6 +342,7 @@ func (t *Log) watchNewFiles(ch chan string) {
 					// we're already tailing this file
 					continue
 				}
+				t.regexpConfig[file] = getRegItems(file, t.Regexp)
 				ch <- file
 			}
 		}
@@ -387,13 +380,22 @@ func (t *Log) watchNewFiles(ch chan string) {
 //	}
 //}
 
-func parseLine2(fileName, metricName, logName string, text string, offset int64) ([]telegraf.Metric, error) {
+func parseLine2(fileName, metricName, logName string, text string, offset int64 ) ([]telegraf.Metric, error) {
 	metrics := make([]telegraf.Metric, 0)
 	fields := make(map[string]interface{})
+
+	logDto:=new(store.LogDto)
+	logDto.Offset=offset
+	logDto.File.Path=fileName
+
+    if strings.Contains(text,`\r\n`){
+		logDto.Flags=append(logDto.Flags,"multiline")
+	}
+	js,_:=json.Marshal(logDto)
 	fields["message"] = text
-	fields["offset"] = offset
+	fields["log"] = string(js)
 	fields["log_name"] = logName
-	fields["file_path"] = fileName
+
 	m, err := metric.New(metricName, map[string]string{}, fields, time.Now())
 	if err != nil {
 		return nil, err
@@ -466,6 +468,7 @@ func (t *Log) receiver(tailer *Tail) {
 				continue
 			}
 		}
+
 		if line == nil && text == "" {
 			continue
 		}
@@ -474,9 +477,8 @@ func (t *Log) receiver(tailer *Tail) {
 			continue
 		}
 		logName := getLogName(text, t.regexpConfig[tailer.Filename])
-		// fmt.Println("tailer.Filename:", tailer.Filename, t.regexpConfig[tailer.Filename])
 		if logName == "" {
-			//fmt.Println(tailer.Filename, "日志行无匹配的正则表达式:", text)
+			fmt.Println(tailer.Filename, "日志行无匹配的正则表达式:", text)
 			continue
 		}
 

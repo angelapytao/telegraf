@@ -528,7 +528,6 @@ func (a *Agent) runOutputs(
 			a.flush(ctx, output, interval, jitter)
 		}(output)
 	}
-
 	for metric := range src {
 		for i, output := range a.Config.Outputs {
 			if i == len(a.Config.Outputs)-1 {
@@ -602,7 +601,6 @@ func (a *Agent) flushOnce(
 ) error {
 	ticker := time.NewTicker(timeout)
 	defer ticker.Stop()
-
 	done := make(chan error)
 	go func() {
 		done <- writeFunc()

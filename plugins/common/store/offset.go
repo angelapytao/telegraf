@@ -9,6 +9,14 @@ import (
 	"sync"
 )
 
+type LogDto struct {
+	Flags []string `json:"flags,omitempty"`
+	Offset int64 `json:"offset"`
+	File struct{
+		Path string `json:"path"`
+	} `json:"file"`
+}
+
 type LogOffset struct {
 	FileName string //文件名
 	file     *os.File

@@ -134,7 +134,6 @@ func (r *RunningOutput) Init() error {
 //
 // Takes ownership of metric
 func (ro *RunningOutput) AddMetric(metric telegraf.Metric) {
-
 	if ok := ro.Config.Filter.Select(metric); !ok {
 		ro.metricFiltered(metric)
 		return

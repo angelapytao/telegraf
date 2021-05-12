@@ -3,6 +3,7 @@ package kafka2
 import (
 	"crypto/tls"
 	"fmt"
+	jsoniter "github.com/json-iterator/go"
 	"log"
 	"regexp"
 	"strings"
@@ -70,7 +71,7 @@ type (
 		producerFunc func(addrs []string, config *sarama.Config) (sarama.SyncProducer, error)
 		//producer   sarama.SyncProducer
 		producers map[string]sarama.SyncProducer
-
+       // loker sync.Mutex
 		serializer serializers.Serializer
 	}
 	TopicSuffix struct {
@@ -352,6 +353,9 @@ func (k *Kafka2) Connect() error {
 
 func (k *Kafka2) Close() error {
 	//return k.producer.Close()
+	//k.loker.Lock()
+	//defer  k.loker.Unlock()
+
 	for _, p := range k.producers {
 		err := p.Close()
 		if err != nil {
@@ -397,34 +401,38 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 			k.Log.Debugf("Could not serialize metric: %v", err)
 			continue
 		}
-		fileName, ok := metric.GetField("file_path")
-		if !ok {
-			return errors.New("file_path为空！")
-		}
 		_logName, ok := metric.GetField("log_name")
 		if !ok {
 			return errors.New("log_name为空！")
 		}
-		offset, ok := metric.GetField("offset")
+		_logDto , ok :=metric.GetField("log")
 		if !ok {
-			return errors.New("offset为空！")
+			return errors.New("log为空！")
 		}
-		topic:=""
+
+		logDto:=new(store.LogDto)
+		err=jsoniter.Unmarshal([]byte(_logDto.(string)),&logDto)
+		if err != nil {
+			return errors.New("log 反序列化失败！")
+		}
+		fileName:=logDto.File.Path
+		offset:=logDto.Offset
+
+		topic := ""
 		logName := _logName.(string)
 		_topic, ok := metric.GetField("topic")
-		if  ok {
-			topic=_topic.(string)
-			if topic==""{
+		if ok {
+			topic = _topic.(string)
+			if topic == "" {
 				return errors.New("metric中的topic字段为空！")
 			}
-		}else{
+		} else {
 			//如果metric中缺少topic字段，则根据配置文件从message中提取
 			topic, err = k.fetchTopic(logName, string(buf))
 			if err != nil {
-				fmt.Println("metric中缺少topic字段，并且在message中提取topic失败！",err)
-				return errors.New("metric中缺少topic字段！"+err.Error())
+				return errors.New("metric中缺少topic字段！" + err.Error())
 			}
-			if topic==""{
+			if topic == "" {
 				return errors.New("metric中缺少topic字段，并且在message中提取topic失败！")
 			}
 		}
@@ -448,10 +456,13 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 			m.Key = sarama.StringEncoder(key)
 		}
 
-		_, _, prodErr := k.producers[logName].SendMessage(m)
-		//fmt.Println("prodErr------------",prodErr )
-		//fmt.Println("topic------------",topic )
-		//fmt.Println("send------------",  string(buf), offset)
+		producer:=k.getProducer(logName)
+		if producer==nil{
+			return fmt.Errorf("%s,未找到kafka配置", logName)
+		}
+		_, _, prodErr := producer.SendMessage(m)
+
+		fmt.Println("send------------", string(buf), offset)
 		if prodErr != nil {
 			errP := prodErr.(*sarama.ProducerError)
 			if errP.Err == sarama.ErrMessageSizeTooLarge {
@@ -464,14 +475,13 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 			}
 			return errP
 		}
-		_fileName := fileName.(string)
-		logOffsetDto, ok := store.MapLogOffset[_fileName]
+		logOffsetDto, ok := store.MapLogOffset[fileName]
 		if !ok {
 			logOffsetDto = new(store.LogOffset)
-			logOffsetDto.FileName = _fileName + ".offset"
-			store.MapLogOffset[_fileName] = logOffsetDto
+			logOffsetDto.FileName = fileName + ".offset"
+			store.MapLogOffset[fileName] = logOffsetDto
 		}
-		err = logOffsetDto.Set(offset.(int64))
+		err = logOffsetDto.Set(offset )
 		if err != nil {
 			return err
 		}
@@ -481,6 +491,9 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 
 func (k *Kafka2) createProducer(config *sarama.Config) error {
 	k.producers = make(map[string]sarama.SyncProducer)
+	//k.loker.Lock()
+	//defer k.loker.Unlock()
+
 	for _, v := range k.LogBrokers {
 		producer, err := k.producerFunc(v.Brokers, config)
 		if err != nil {
@@ -517,6 +530,17 @@ func (k *Kafka2) fetchTopic(name, msg string) (string, error) {
 		topic = topic[0 : len(topic)-1]
 	}
 	return topic, nil
+}
+
+func (k *Kafka2)getProducer(key string)sarama.SyncProducer{
+	//k.loker.Lock()
+	//defer k.loker.Unlock()
+
+	p,isok:= k.producers[key]
+	if !isok{
+		return nil
+	}
+	return p
 }
 
 func init() {
