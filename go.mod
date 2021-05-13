@@ -9,9 +9,13 @@ require (
 	github.com/alecthomas/units v0.0.0-20210208195552-ff826a37aa15
 	github.com/aws/aws-sdk-go v1.38.23
 	github.com/dimchansky/utfbom v1.1.1
+	github.com/dlclark/regexp2 v1.4.0 // indirect
+	github.com/dop251/goja v0.0.0-20200831102558-9af81ddcf0e1
+	github.com/dop251/goja_nodejs v0.0.0-20171011081505-adff31b136e6
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/go-logfmt/logfmt v0.5.0
 	github.com/go-ole/go-ole v1.2.5 // indirect
+	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
 	github.com/gobwas/glob v0.2.3
 	github.com/gofrs/uuid v4.0.0+incompatible
 	github.com/golang/geo v0.0.0-20210211234256-740aa86cb551
@@ -34,11 +38,15 @@ require (
 	github.com/tklauser/go-sysconf v0.3.5 // indirect
 	github.com/vjeantet/grok v1.0.1
 	go.uber.org/multierr v1.6.0 // indirect
+	go.uber.org/zap v1.16.0
 	golang.org/x/sys v0.0.0-20210421221651-33663a62ff08
 	golang.org/x/text v0.3.6
 	gopkg.in/fsnotify.v1 v1.4.7 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7
 )
 
-// replaced due to https://github.com/satori/go.uuid/issues/73
-replace github.com/satori/go.uuid => github.com/gofrs/uuid v3.2.0+incompatible
+replace (
+	github.com/dop251/goja => github.com/andrewkroh/goja v0.0.0-20190128172624-dd2ac4456e20
+	github.com/dop251/goja_nodejs => github.com/dop251/goja_nodejs v0.0.0-20171011081505-adff31b136e6
+	github.com/satori/go.uuid => github.com/gofrs/uuid v3.2.0+incompatible // replaced due to https://github.com/satori/go.uuid/issues/73
+)

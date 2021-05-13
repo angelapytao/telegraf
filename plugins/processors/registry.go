@@ -11,6 +11,6 @@ func Add(name string, creator Creator) {
 }
 
 type Processor interface {
-	Run(event *beat.Event) (*beat.Event, error)
+	Run(event telegraf.Metric) (telegraf.Metric, error)
 	String() string
 }
