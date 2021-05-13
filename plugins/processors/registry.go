@@ -9,3 +9,8 @@ var Processors = map[string]Creator{}
 func Add(name string, creator Creator) {
 	Processors[name] = creator
 }
+
+type Processor interface {
+	Run(event *beat.Event) (*beat.Event, error)
+	String() string
+}
