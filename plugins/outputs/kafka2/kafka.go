@@ -73,6 +73,8 @@ type (
 		producers map[string]sarama.SyncProducer
        // loker sync.Mutex
 		serializer serializers.Serializer
+		//*sarama.Config
+		config *sarama.Config
 	}
 	TopicSuffix struct {
 		Method    string   `toml:"method"`
@@ -279,13 +281,8 @@ func (k *Kafka2) SetSerializer(serializer serializers.Serializer) {
 	k.serializer = serializer
 }
 
-func (k *Kafka2) Connect() error {
-	err := ValidateTopicSuffixMethod(k.TopicSuffix.Method)
-	if err != nil {
-		return err
-	}
-	config := sarama.NewConfig()
-
+func (k *Kafka2) initConfig() error {
+    config := sarama.NewConfig()
 	if k.Version != "" {
 		version, err := sarama.ParseKafkaVersion(k.Version)
 		if err != nil {
@@ -347,8 +344,85 @@ func (k *Kafka2) Connect() error {
 		}
 		config.Net.SASL.Version = version
 	}
+	k.config=config
+	return nil
+}
 
-	return k.createProducer(config)
+func (k *Kafka2) Connect() error {
+	err := ValidateTopicSuffixMethod(k.TopicSuffix.Method)
+	if err != nil {
+		return err
+	}
+
+	//config := sarama.NewConfig()
+	//
+	//if k.Version != "" {
+	//	version, err := sarama.ParseKafkaVersion(k.Version)
+	//	if err != nil {
+	//		return err
+	//	}
+	//	config.Version = version
+	//}
+	//
+	//if k.ClientID != "" {
+	//	config.ClientID = k.ClientID
+	//} else {
+	//	config.ClientID = "Telegraf"
+	//}
+	//
+	//config.Producer.RequiredAcks = sarama.RequiredAcks(k.RequiredAcks)
+	//config.Producer.Compression = sarama.CompressionCodec(k.CompressionCodec)
+	//config.Producer.Retry.Max = k.MaxRetry
+	//config.Producer.Return.Successes = true
+	//
+	//if k.MaxMessageBytes > 0 {
+	//	config.Producer.MaxMessageBytes = k.MaxMessageBytes
+	//}
+	//
+	//// Legacy support ssl config
+	//if k.Certificate != "" {
+	//	k.TLSCert = k.Certificate
+	//	k.TLSCA = k.CA
+	//	k.TLSKey = k.Key
+	//}
+	//
+	//if k.EnableTLS != nil && *k.EnableTLS {
+	//	config.Net.TLS.Enable = true
+	//}
+	//
+	//tlsConfig, err := k.ClientConfig.TLSConfig()
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//if tlsConfig != nil {
+	//	config.Net.TLS.Config = tlsConfig
+	//
+	//	// To maintain backwards compatibility, if the enable_tls option is not
+	//	// set TLS is enabled if a non-default TLS config is used.
+	//	if k.EnableTLS == nil {
+	//		k.Log.Warnf("Use of deprecated configuration: enable_tls should be set when using TLS")
+	//		config.Net.TLS.Enable = true
+	//	}
+	//}
+	//
+	//if k.SASLUsername != "" && k.SASLPassword != "" {
+	//	config.Net.SASL.User = k.SASLUsername
+	//	config.Net.SASL.Password = k.SASLPassword
+	//	config.Net.SASL.Enable = true
+	//
+	//	version, err := kafka.SASLVersion(config.Version, k.SASLVersion)
+	//	if err != nil {
+	//		return err
+	//	}
+	//	config.Net.SASL.Version = version
+	//}
+
+	err =k.initConfig()
+	if err!=nil{
+		return err
+	}
+	return k.createProducer()
 }
 
 func (k *Kafka2) Close() error {
@@ -419,12 +493,17 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 		offset:=logDto.Offset
 
 		topic := ""
+		var hosts []string
 		logName := _logName.(string)
 		_topic, ok := metric.GetField("topic")
 		if ok {
 			topic = _topic.(string)
 			if topic == "" {
 				return errors.New("metric中的topic字段为空！")
+			}
+			_hosts, ok := metric.GetField("hosts")
+			if ok {
+				hosts = _hosts.([]string)
 			}
 		} else {
 			//如果metric中缺少topic字段，则根据配置文件从message中提取
@@ -456,9 +535,9 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 			m.Key = sarama.StringEncoder(key)
 		}
 
-		producer:=k.getProducer(logName)
+		producer:=k.getProducer(logName,topic,hosts)
 		if producer==nil{
-			return fmt.Errorf("%s,未找到kafka配置", logName)
+			return fmt.Errorf("%s,%s,%v 连接kafka失败", logName,topic,hosts)
 		}
 		_, _, prodErr := producer.SendMessage(m)
 
@@ -489,13 +568,13 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 	return nil
 }
 
-func (k *Kafka2) createProducer(config *sarama.Config) error {
+func (k *Kafka2) createProducer() error {
 	k.producers = make(map[string]sarama.SyncProducer)
 	//k.loker.Lock()
 	//defer k.loker.Unlock()
 
 	for _, v := range k.LogBrokers {
-		producer, err := k.producerFunc(v.Brokers, config)
+		producer, err := k.producerFunc(v.Brokers, k.config)
 		if err != nil {
 			return err
 		}
@@ -532,9 +611,23 @@ func (k *Kafka2) fetchTopic(name, msg string) (string, error) {
 	return topic, nil
 }
 
-func (k *Kafka2)getProducer(key string)sarama.SyncProducer{
+func (k *Kafka2)getProducer(key,topic string,hosts []string)sarama.SyncProducer{
 	//k.loker.Lock()
 	//defer k.loker.Unlock()
+	if topic!="" && len(hosts)>0 {
+		key =strings.Join(hosts,"")+"_"+topic
+		p,isok:= k.producers[key]
+		if  isok{
+			return p
+		}
+		producer, err := k.producerFunc(hosts, k.config)
+		if err != nil {
+			fmt.Println("连接kafka出错",hosts,topic)
+			return nil
+		}
+		k.producers[key] = producer
+		return producer
+	}
 
 	p,isok:= k.producers[key]
 	if !isok{
