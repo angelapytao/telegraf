@@ -53,7 +53,7 @@ func (s *Script) initOnce() {
 		Params:            s.Params,
 		Timeout:           s.Timeout,
 		TagOnException:    s.TagOnException,
-		MaxCachedSessions: s.MaxCachedSessions,
+		MaxCachedSessions: 4,
 	}
 	p, err := javascript.New(config)
 	if err != nil {

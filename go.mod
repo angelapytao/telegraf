@@ -41,6 +41,7 @@ require (
 	go.uber.org/zap v1.16.0
 	golang.org/x/sys v0.0.0-20210421221651-33663a62ff08
 	golang.org/x/text v0.3.6
+	golang.org/x/tools v0.0.0-20191029190741-b9c20aec41a5
 	gopkg.in/fsnotify.v1 v1.4.7 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7
 )

@@ -2,9 +2,10 @@ package taglimit
 
 import (
 	"fmt"
+	"log"
+
 	"github.com/influxdata/telegraf"
 	"github.com/influxdata/telegraf/plugins/processors"
-	"log"
 )
 
 const sampleConfig = `

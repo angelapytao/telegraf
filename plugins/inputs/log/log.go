@@ -7,11 +7,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	jsoniter "github.com/json-iterator/go"
 	"io"
 	"strings"
 	"sync"
 	"time"
+
+	jsoniter "github.com/json-iterator/go"
 
 	"github.com/influxdata/telegraf/plugins/common/store"
 
@@ -21,6 +22,7 @@ import (
 	//"github.com/influxdata/tail"
 	"github.com/influxdata/telegraf"
 	"github.com/influxdata/telegraf/internal/globpath"
+	"github.com/influxdata/telegraf/internal/lib/common"
 	"github.com/influxdata/telegraf/plugins/common/encoding"
 	"github.com/influxdata/telegraf/plugins/inputs"
 	"github.com/influxdata/telegraf/plugins/parsers"
@@ -34,7 +36,7 @@ const (
 var (
 	offsets      = make(map[string]int64)
 	offsetsMutex = new(sync.Mutex)
-	json = jsoniter.ConfigCompatibleWithStandardLibrary
+	json         = jsoniter.ConfigCompatibleWithStandardLibrary
 )
 
 type empty struct{}
@@ -241,26 +243,26 @@ func (t *Log) tailNewFiles(fromBeginning bool) error {
 
 			var seek *SeekInfo
 
-			 seek = &SeekInfo{
+			seek = &SeekInfo{
 				Whence: 0, //SEEK_SET int = 0 ,seek relative to the origin of the file
 				Offset: offset,
-			  }
+			}
 
-			    //if !t.Pipe && !fromBeginning {
-				//if offset, ok := t.offsets[file]; ok {
-				//	t.Log.Debugf("Using offset %d for %q", offset, file)
-				//if offset==0{
-				//	seek = &SeekInfo{
-				//		Whence: 0,//SEEK_SET int = 0 ,seek relative to the origin of the file
-				//		Offset: offset,
-				//	}
-				//} else {
-				//	seek = &SeekInfo{
-				//		Whence: 2, //SEEK_END int = 2 ,seek relative to the end
-				//		Offset: 0,
-				//	}
-				//}
-			    //}
+			//if !t.Pipe && !fromBeginning {
+			//if offset, ok := t.offsets[file]; ok {
+			//	t.Log.Debugf("Using offset %d for %q", offset, file)
+			//if offset==0{
+			//	seek = &SeekInfo{
+			//		Whence: 0,//SEEK_SET int = 0 ,seek relative to the origin of the file
+			//		Offset: offset,
+			//	}
+			//} else {
+			//	seek = &SeekInfo{
+			//		Whence: 2, //SEEK_END int = 2 ,seek relative to the end
+			//		Offset: 0,
+			//	}
+			//}
+			//}
 
 			tailer, err := TailFile(file,
 				Config{
@@ -380,21 +382,32 @@ func (t *Log) watchNewFiles(ch chan string) {
 //	}
 //}
 
-func parseLine2(fileName, metricName, logName string, text string, offset int64 ) ([]telegraf.Metric, error) {
+func parseLine2(fileName, metricName, logName string, text string, offset int64) ([]telegraf.Metric, error) {
 	metrics := make([]telegraf.Metric, 0)
-	fields := make(map[string]interface{})
+	// fields := make(map[string]interface{})
 
-	logDto:=new(store.LogDto)
-	logDto.Offset=offset
-	logDto.File.Path=fileName
+	// logDto := new(store.LogDto)
+	// logDto.Offset = offset
+	// logDto.File.Path = fileName
 
-    if strings.Contains(text,`\r\n`){
-		logDto.Flags=append(logDto.Flags,"multiline")
+	// if strings.Contains(text, `\r\n`) {
+	// 	logDto.Flags = append(logDto.Flags, "multiline")
+	// }
+	// js, _ := json.Marshal(logDto)
+	// fields["message"] = text
+	// fields["log"] = string(js)
+	// fields["log_name"] = logName
+	// fields["log.file.path"] = fileName
+	fields := common.MapStr{
+		"log.file.path": fileName,
+		"log": common.MapStr{
+			"file": common.MapStr{
+				"path": fileName,
+			},
+			"offset": offset,
+			"flags":  []string{"multiline"},
+		},
 	}
-	js,_:=json.Marshal(logDto)
-	fields["message"] = text
-	fields["log"] = string(js)
-	fields["log_name"] = logName
 
 	m, err := metric.New(metricName, map[string]string{}, fields, time.Now())
 	if err != nil {

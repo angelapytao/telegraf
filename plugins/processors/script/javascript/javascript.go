@@ -1,9 +1,6 @@
 package javascript
 
 import (
-	"runtime"
-	"strings"
-
 	"github.com/dop251/goja"
 	"github.com/influxdata/telegraf"
 	"github.com/influxdata/telegraf/plugins/processors"
@@ -15,8 +12,7 @@ type jsProcessor struct {
 	sessionPool *sessionPool
 	sourceProg  *goja.Program
 	sourceFile  string
-	// stats       *processorStats
-	Tag string
+	Tag         string
 }
 
 // New constructs a new Javascript processor from the given config
@@ -27,21 +23,8 @@ func New(c *Config) (processors.Processor, error) {
 		return nil, err
 	}
 
-	var sourceFile string
-	var sourceCode []byte
-
-	switch {
-	case c.Source != "":
-		sourceFile = "inline.js"
-		sourceCode = []byte(c.Source)
-		// case c.File != "":
-		// 	sourceFile, sourceCode, err = loadSources(c.File)
-		// case len(c.Files) > 0:
-		// 	sourceFile, sourceCode, err = loadSources(c.Files...)
-	}
-	// if err != nil {
-	// 	return nil, annotateError(c.Tag, err)
-	// }
+	sourceFile := "inline.js"
+	sourceCode := []byte(c.Source)
 
 	// Validate processor source code.
 	prog, err := goja.Compile(sourceFile, string(sourceCode), true)
@@ -59,8 +42,7 @@ func New(c *Config) (processors.Processor, error) {
 		sessionPool: pool,
 		sourceProg:  prog,
 		sourceFile:  sourceFile,
-		Tag:         "TestJsProcessorTag",
-		// stats:       getStats(c.Tag, reg),
+		Tag:         "JsProcessor",
 	}, nil
 }
 
@@ -84,36 +66,9 @@ func (p *jsProcessor) Run(event telegraf.Metric) (telegraf.Metric, error) {
 	var err error
 
 	rtn, err = s.runProcessFunc(event)
-	// if p.stats == nil {
-	// 	rtn, err = s.runProcessFunc(event)
-	// } else {
-	// 	rtn, err = p.runWithStats(s, event)
-	// }
 	return rtn, annotateError("p.Tag", err)
 }
 
-// func (p *jsProcessor) runWithStats(s *session, event telegraf.Metric) (telegraf.Metric, error) {
-// 	start := time.Now()
-// 	event, err := s.runProcessFunc(event)
-// 	elapsed := time.Since(start)
-
-// 	p.stats.processTime.Update(int64(elapsed))
-// 	if err != nil {
-// 		p.stats.exceptions.Inc()
-// 	}
-// 	return event, err
-// }
-
 func (p *jsProcessor) String() string {
 	return "script=[type=javascript, id=" + p.Tag + ", sources=" + p.sourceFile + "]"
-}
-
-// hasMeta reports whether path contains any of the magic characters
-// recognized by Match/Glob.
-func hasMeta(path string) bool {
-	magicChars := `*?[`
-	if runtime.GOOS != "windows" {
-		magicChars = `*?[\`
-	}
-	return strings.ContainsAny(path, magicChars)
 }

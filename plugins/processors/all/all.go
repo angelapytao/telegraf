@@ -13,6 +13,7 @@ import (
 	_ "github.com/influxdata/telegraf/plugins/processors/regex"
 	_ "github.com/influxdata/telegraf/plugins/processors/rename"
 	_ "github.com/influxdata/telegraf/plugins/processors/s2geo"
+	_ "github.com/influxdata/telegraf/plugins/processors/script"
 	_ "github.com/influxdata/telegraf/plugins/processors/strings"
 	_ "github.com/influxdata/telegraf/plugins/processors/tag_limit"
 	_ "github.com/influxdata/telegraf/plugins/processors/template"

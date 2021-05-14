@@ -67,9 +67,6 @@ type session struct {
 func newSession(p *goja.Program, conf *Config, test bool) (*session, error) {
 	// Create a logger
 	logger := models.NewLogger("processors", logName, "")
-	// if conf.Tag != "" {
-	// 	logger = logger.With("instance_id", conf.Tag)
-	// }
 
 	// Measure load times
 	start := time.Now()

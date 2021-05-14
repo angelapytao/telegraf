@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/influxdata/telegraf"
+	"github.com/influxdata/telegraf/internal/lib/common"
 )
 
 type metric struct {
@@ -14,6 +15,7 @@ type metric struct {
 	tags   []*telegraf.Tag
 	fields []*telegraf.Field
 	tm     time.Time
+	events common.MapStr
 
 	tp        telegraf.ValueType
 	aggregate bool
@@ -51,6 +53,11 @@ func New(
 	}
 
 	if len(fields) > 0 {
+		if vtype == telegraf.Event {
+			m.events = fields
+			return m, nil
+		}
+
 		m.fields = make([]*telegraf.Field, 0, len(fields))
 		for k, v := range fields {
 			v := convertField(v)
@@ -107,6 +114,10 @@ func (m *metric) TagList() []*telegraf.Tag {
 }
 
 func (m *metric) Fields() map[string]interface{} {
+	if m.tp == telegraf.Event {
+		return m.events
+	}
+
 	fields := make(map[string]interface{}, len(m.fields))
 	for _, field := range m.fields {
 		fields[field.Key] = field.Value
@@ -214,6 +225,19 @@ func (m *metric) GetField(key string) (interface{}, bool) {
 		}
 	}
 	return nil, false
+}
+
+func (m *metric) GetFieldValue(key string) (interface{}, error) {
+	return m.events.GetValue(key)
+}
+
+func (m *metric) PutFieldValue(key string, v interface{}) (interface{}, error) {
+	v, err := m.events.Put(key, v)
+	return v, err
+}
+
+func (m *metric) Events() common.MapStr {
+	return m.events
 }
 
 func (m *metric) RemoveField(key string) {
@@ -374,6 +398,10 @@ func convertField(v interface{}) interface{} {
 		if v != nil {
 			return float64(*v)
 		}
+	// case common.MapStr:
+	// 	if v != nil {
+	// 		return common.MapStr(v)
+	// 	}
 	default:
 		return nil
 	}

@@ -15,6 +15,7 @@ const (
 	Untyped
 	Summary
 	Histogram
+	Event
 )
 
 type Tag struct {
@@ -53,7 +54,8 @@ type Metric interface {
 	HasField(key string) bool
 	AddField(key string, value interface{})
 	RemoveField(key string)
-
+	GetFieldValue(key string) (interface{}, error)
+	PutFieldValue(key string, value interface{}) (interface{}, error)
 	SetTime(t time.Time)
 
 	// HashID returns an unique identifier for the series.
