@@ -152,7 +152,6 @@ func (b *Buffer) Add(metrics ...telegraf.Metric) int {
 func (b *Buffer) Batch(batchSize int) []telegraf.Metric {
 	b.Lock()
 	defer b.Unlock()
-
 	outLen := min(b.size, batchSize)
 	out := make([]telegraf.Metric, outLen)
 	if outLen == 0 {

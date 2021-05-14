@@ -67,7 +67,7 @@ type Log struct {
 	cancel       context.CancelFunc
 	sem          semaphore
 	decoder      *encoding.Decoder
-	regexpConfig map[string][]RegexpItem
+	regexpConfig sync.Map //[string][]RegexpItem
 }
 
 func NewLog() *Log {
@@ -316,7 +316,6 @@ func (t *Log) tailNewFiles(fromBeginning bool) error {
 
 //根据配置的正则表达式初始化
 func (t *Log) initReg() error {
-	t.regexpConfig = make(map[string][]RegexpItem)
 
 	for _, filepath := range t.Files {
 		g, err := globpath.Compile(filepath)
@@ -324,7 +323,10 @@ func (t *Log) initReg() error {
 			t.Log.Errorf("Glob %q failed to compile: %s", filepath, err.Error())
 		}
 		for _, file := range g.Match() {
-			t.regexpConfig[file] = getRegItems(file, t.Regexp)
+
+			//t.regexpConfig[file] = getRegItems(file, t.Regexp)
+			regoitem:=getRegItems(file, t.Regexp)
+			t.regexpConfig.Store(file,regoitem)
 		}
 	}
 	return nil
@@ -344,7 +346,9 @@ func (t *Log) watchNewFiles(ch chan string) {
 					// we're already tailing this file
 					continue
 				}
-				t.regexpConfig[file] = getRegItems(file, t.Regexp)
+				//t.regexpConfig[file] = getRegItems(file, t.Regexp)
+				regItem :=getRegItems(file, t.Regexp)
+				t.regexpConfig.Store(file,regItem)
 				ch <- file
 			}
 		}
@@ -384,32 +388,26 @@ func (t *Log) watchNewFiles(ch chan string) {
 
 func parseLine2(fileName, metricName, logName string, text string, offset int64) ([]telegraf.Metric, error) {
 	metrics := make([]telegraf.Metric, 0)
-	// fields := make(map[string]interface{})
 
-	// logDto := new(store.LogDto)
-	// logDto.Offset = offset
-	// logDto.File.Path = fileName
+	_flags:=""
+	if strings.Contains(text, `\r\n`) {
+		_flags = "multiline"
+	}
 
-	// if strings.Contains(text, `\r\n`) {
-	// 	logDto.Flags = append(logDto.Flags, "multiline")
-	// }
-	// js, _ := json.Marshal(logDto)
-	// fields["message"] = text
-	// fields["log"] = string(js)
-	// fields["log_name"] = logName
-	// fields["log.file.path"] = fileName
 	fields := common.MapStr{
-		"log.file.path": fileName,
 		"log": common.MapStr{
 			"file": common.MapStr{
 				"path": fileName,
 			},
 			"offset": offset,
-			"flags":  []string{"multiline"},
+			"flags":  []string{_flags},
 		},
+		"message":text,
+		"log_name":logName,
 	}
 
-	m, err := metric.New(metricName, map[string]string{}, fields, time.Now())
+	m, err := metric.New(metricName, map[string]string{}, fields, time.Now(),telegraf.Event)
+
 	if err != nil {
 		return nil, err
 	}
@@ -489,7 +487,12 @@ func (t *Log) receiver(tailer *Tail) {
 			t.Log.Errorf("Tailing %q: %s", tailer.Filename, line.Err.Error())
 			continue
 		}
-		logName := getLogName(text, t.regexpConfig[tailer.Filename])
+		regItem,ok:=t.regexpConfig.Load(tailer.Filename)
+		if !ok{
+			fmt.Println(tailer.Filename, "无匹配的正则表达式!")
+			continue
+		}
+		logName := getLogName(text, regItem.([]RegexpItem))
 		if logName == "" {
 			fmt.Println(tailer.Filename, "日志行无匹配的正则表达式:", text)
 			continue

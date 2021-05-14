@@ -2,8 +2,6 @@ package json2
 
 import (
 	"encoding/json"
-	"github.com/influxdata/telegraf/plugins/common/store"
-	jsoniter "github.com/json-iterator/go"
 	"time"
 
 	"github.com/influxdata/telegraf"
@@ -53,18 +51,17 @@ func (s *serializer) createObject(metric telegraf.Metric) map[string]interface{}
 	m := make(map[string]interface{})//, 4)
 	m["tags"] = metric.Tags()
 	//m["fields"] = metric.Fields()
-	//仿照filebeat格式，发送到kafka,不显示fields字段名
 	fields:= metric.Fields()
 	for k,v:=range fields{
-		//定制Log字段反序列化
-		if  k=="log"{
-			logDto:=new(store.LogDto)
-			err:=jsoniter.Unmarshal([]byte(v.(string)),&logDto)
-			if err==nil{
-				m[k] =logDto
-				continue
-			}
-		}
+		////定制Log字段反序列化
+		//if  k=="log"{
+		//	logDto:=new(store.LogDto)
+		//	err:=jsoniter.Unmarshal([]byte(v.(string)),&logDto)
+		//	if err==nil{
+		//		m[k] =logDto
+		//		continue
+		//	}
+		//}
 		m[k] =v
 	}
 

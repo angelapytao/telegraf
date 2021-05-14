@@ -88,7 +88,6 @@ func (a *Agent) Run(ctx context.Context) error {
 
 	if len(a.Config.Processors) > 0 {
 		dst = procC
-
 		wg.Add(1)
 		go func(src, dst chan telegraf.Metric) {
 			defer wg.Done()
@@ -106,7 +105,6 @@ func (a *Agent) Run(ctx context.Context) error {
 
 	if len(a.Config.Aggregators) > 0 {
 		dst = outputC
-
 		wg.Add(1)
 		go func(src, dst chan telegraf.Metric) {
 			defer wg.Done()
@@ -311,7 +309,6 @@ func (a *Agent) gatherOnInterval(
 		if err != nil {
 			acc.AddError(err)
 		}
-
 		select {
 		case <-ticker.C:
 			continue
@@ -528,6 +525,7 @@ func (a *Agent) runOutputs(
 			a.flush(ctx, output, interval, jitter)
 		}(output)
 	}
+
 	for metric := range src {
 		for i, output := range a.Config.Outputs {
 			if i == len(a.Config.Outputs)-1 {

@@ -2,24 +2,24 @@ package kafka2
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
-	jsoniter "github.com/json-iterator/go"
+
 	"log"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/influxdata/telegraf/plugins/common/store"
 
-	"github.com/pkg/errors"
-
 	"github.com/Shopify/sarama"
 	"github.com/gofrs/uuid"
 	"github.com/influxdata/telegraf"
+	"github.com/influxdata/telegraf/internal/lib/common"
 	tlsint "github.com/influxdata/telegraf/internal/tls"
 	"github.com/influxdata/telegraf/plugins/common/kafka"
 	"github.com/influxdata/telegraf/plugins/outputs"
 	"github.com/influxdata/telegraf/plugins/serializers"
+	"github.com/pkg/errors"
 )
 
 var ValidTopicSuffixMethods = []string{
@@ -71,7 +71,7 @@ type (
 		producerFunc func(addrs []string, config *sarama.Config) (sarama.SyncProducer, error)
 		//producer   sarama.SyncProducer
 		producers map[string]sarama.SyncProducer
-       // loker sync.Mutex
+		// loker sync.Mutex
 		serializer serializers.Serializer
 		//*sarama.Config
 		config *sarama.Config
@@ -282,7 +282,7 @@ func (k *Kafka2) SetSerializer(serializer serializers.Serializer) {
 }
 
 func (k *Kafka2) initConfig() error {
-    config := sarama.NewConfig()
+	config := sarama.NewConfig()
 	if k.Version != "" {
 		version, err := sarama.ParseKafkaVersion(k.Version)
 		if err != nil {
@@ -344,7 +344,7 @@ func (k *Kafka2) initConfig() error {
 		}
 		config.Net.SASL.Version = version
 	}
-	k.config=config
+	k.config = config
 	return nil
 }
 
@@ -418,8 +418,8 @@ func (k *Kafka2) Connect() error {
 	//	config.Net.SASL.Version = version
 	//}
 
-	err =k.initConfig()
-	if err!=nil{
+	err = k.initConfig()
+	if err != nil {
 		return err
 	}
 	return k.createProducer()
@@ -479,18 +479,27 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 		if !ok {
 			return errors.New("log_name为空！")
 		}
-		_logDto , ok :=metric.GetField("log")
+		_logDto, ok := metric.GetField("log")
 		if !ok {
 			return errors.New("log为空！")
 		}
-
-		logDto:=new(store.LogDto)
-		err=jsoniter.Unmarshal([]byte(_logDto.(string)),&logDto)
+		logDto := _logDto.(common.MapStr)
+		_file , err := logDto.GetValue("file")
 		if err != nil {
-			return errors.New("log 反序列化失败！")
+			js,_:=json.Marshal(logDto)
+			return errors.New("file为空！"+string(js))
 		}
-		fileName:=logDto.File.Path
-		offset:=logDto.Offset
+		 file:= _file.(common.MapStr)
+		_fileName, err := file.GetValue("path")
+		if err != nil {
+			return errors.New("path为空！")
+		}
+		fileName := _fileName.(string)
+		_offset, err := logDto.GetValue("offset")
+		if err != nil {
+			return errors.New("log offset为空！")
+		}
+		offset := _offset.(int64)
 
 		topic := ""
 		var hosts []string
@@ -535,9 +544,9 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 			m.Key = sarama.StringEncoder(key)
 		}
 
-		producer:=k.getProducer(logName,topic,hosts)
-		if producer==nil{
-			return fmt.Errorf("%s,%s,%v 连接kafka失败", logName,topic,hosts)
+		producer := k.getProducer(logName, topic, hosts)
+		if producer == nil {
+			return fmt.Errorf("%s,%s,%v 连接kafka失败", logName, topic, hosts)
 		}
 		_, _, prodErr := producer.SendMessage(m)
 
@@ -560,7 +569,7 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 			logOffsetDto.FileName = fileName + ".offset"
 			store.MapLogOffset[fileName] = logOffsetDto
 		}
-		err = logOffsetDto.Set(offset )
+		err = logOffsetDto.Set(offset)
 		if err != nil {
 			return err
 		}
@@ -595,42 +604,29 @@ func (k *Kafka2) fetchTopic(name, msg string) (string, error) {
 	if b == nil {
 		return "", errors.New(name + "没有匹配的配置节点，请检查[[outputs.kafka2.log_brokers]]")
 	}
-	if b.TopicFilterReg == "" {
-		return b.Name, nil
-	}
-	reg := regexp.MustCompile(b.TopicFilterReg)
-	r := reg.FindAllString(msg, -1)
-	if b.TopicFilterNo >= len(r) {
-		return "", errors.New("解析message中的topic出错，索引超出数组界限！请检查配置参数：topic_filter_reg和topic_filter_no")
-	}
-	topic := r[b.TopicFilterNo]
-	if b.TopicFilterDelPreSuf {
-		topic = topic[1:]
-		topic = topic[0 : len(topic)-1]
-	}
-	return topic, nil
+	 return b.Name, nil
 }
 
-func (k *Kafka2)getProducer(key,topic string,hosts []string)sarama.SyncProducer{
+func (k *Kafka2) getProducer(key, topic string, hosts []string) sarama.SyncProducer {
 	//k.loker.Lock()
 	//defer k.loker.Unlock()
-	if topic!="" && len(hosts)>0 {
-		key =strings.Join(hosts,"")+"_"+topic
-		p,isok:= k.producers[key]
-		if  isok{
+	if topic != "" && len(hosts) > 0 {
+		key = strings.Join(hosts, "") + "_" + topic
+		p, isok := k.producers[key]
+		if isok {
 			return p
 		}
 		producer, err := k.producerFunc(hosts, k.config)
 		if err != nil {
-			fmt.Println("连接kafka出错",hosts,topic)
+			fmt.Println("连接kafka出错", hosts, topic)
 			return nil
 		}
 		k.producers[key] = producer
 		return producer
 	}
 
-	p,isok:= k.producers[key]
-	if !isok{
+	p, isok := k.producers[key]
+	if !isok {
 		return nil
 	}
 	return p

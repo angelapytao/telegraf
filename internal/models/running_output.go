@@ -199,6 +199,7 @@ func (ro *RunningOutput) Write() error {
 		if len(batch) == 0 {
 			break
 		}
+
 		err := ro.write(batch)
 		if err != nil {
 			ro.buffer.Reject(batch)

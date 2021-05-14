@@ -130,9 +130,12 @@ func (m *metric) FieldList() []*telegraf.Field {
 	if m.tp == telegraf.Event {
 		var fields map[string]interface{} = m.events
 		i := 0
-		for k, field := range fields {
-			m.fields[i] = &telegraf.Field{Key: k, Value: field}
-			i++
+		if len(fields)>0 {
+			m.fields= make([]*telegraf.Field,len(fields))
+			for k, field := range fields {
+				m.fields[i] = &telegraf.Field{Key: k, Value: field}
+				i++
+			}
 		}
 	}
 	return m.fields
