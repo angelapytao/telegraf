@@ -127,6 +127,14 @@ func (m *metric) Fields() map[string]interface{} {
 }
 
 func (m *metric) FieldList() []*telegraf.Field {
+	if m.tp == telegraf.Event {
+		var fields map[string]interface{} = m.events
+		i := 0
+		for k, field := range fields {
+			m.fields[i] = &telegraf.Field{Key: k, Value: field}
+			i++
+		}
+	}
 	return m.fields
 }
 
