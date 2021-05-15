@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/exec"
@@ -500,19 +501,33 @@ func (e *Exec2) Init() error {
 		if err != nil {
 			return err
 		}
+		t1:=rand.Intn(120)
+		//realUrl := e.URL + "/getPorts?hostIp=" + localIP
+		realUrl := e.URL +  localIP
 
-		realUrl := e.URL + "/getPorts?hostIp=" + localIP
-		ports, err := e.gather(realUrl)
-		if err != nil {
-			e.Log.Errorf("Gather ports err: %v", err)
+      go func(){
+		  //随机休眠若干秒，防止批量重启导致的并发洪峰
+		  time.Sleep(time.Second*time.Duration(t1))
 
-			var ctx context.Context
-			ctx, e.cancel = context.WithCancel(context.Background())
-			go e.gatherErrRetryInterval(realUrl, "", ctx, e.GatherErrRetryInterval.Duration)
-		}
-		e.addExPatternCommands(ports)
+		  ticker := time.NewTicker(time.Second*120)
+		  defer ticker.Stop()
+      	 for {
+			 ports, err := e.gather(realUrl)
+			 if err != nil {
+				 e.Log.Errorf("Gather ports err: %v", err)
 
-		e.init = true
+				 var ctx context.Context
+				 ctx, e.cancel = context.WithCancel(context.Background())
+				 go e.gatherErrRetryInterval(realUrl, "", ctx, e.GatherErrRetryInterval.Duration)
+			 }
+			 e.addExPatternCommands(ports)
+			 e.init = true
+			 select {
+			 case <-ticker.C:
+				 continue
+			 }
+		 }
+	 }()
 	}
 
 	return nil

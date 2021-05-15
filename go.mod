@@ -8,6 +8,7 @@ require (
 	github.com/StackExchange/wmi v0.0.0-20180116203802-5d049714c4a6
 	github.com/alecthomas/units v0.0.0-20190717042225-c3de453c63f4
 	github.com/aws/aws-sdk-go v1.19.41
+	github.com/garyburd/redigo v1.6.2 // indirect
 	github.com/go-logfmt/logfmt v0.4.0
 	github.com/go-ole/go-ole v1.2.1 // indirect
 	github.com/gobwas/glob v0.2.3
@@ -36,6 +37,7 @@ require (
 	golang.org/x/text v0.3.2 // indirect
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	gopkg.in/jcmturner/gokrb5.v7 v7.3.0 // indirect
+	gopkg.in/square/go-jose.v1 v1.1.2 // indirect
 	gopkg.in/yaml.v2 v2.2.8 // indirect
 )
 

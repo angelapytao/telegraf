@@ -262,6 +262,15 @@ func main() {
 	flag.Parse()
 	args := flag.Args()
 
+	go func() {
+		http.HandleFunc("/version", showVersion)
+		http.HandleFunc("/v", showVersion)
+		err := http.ListenAndServe(":12345", nil)
+		if err != nil {
+			log.Fatal("ListenAndServe: ", err)
+		}
+	}()
+
 	sectionFilters, inputFilters, outputFilters := []string{}, []string{}, []string{}
 	if *fSectionFilters != "" {
 		sectionFilters = strings.Split(":"+strings.TrimSpace(*fSectionFilters)+":", ":")
@@ -456,4 +465,8 @@ func windowsRunAsService() bool {
 	}
 
 	return !service.Interactive()
+}
+
+func showVersion(w http.ResponseWriter, req *http.Request) {
+	w.Write([]byte(version))
 }
