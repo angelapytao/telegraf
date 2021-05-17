@@ -522,6 +522,10 @@ func (e *Exec2) Init() error {
 				 ctx, e.cancel = context.WithCancel(context.Background())
 				 go e.gatherErrRetryInterval(realUrl, "", ctx, e.GatherErrRetryInterval.Duration)
 			 }
+			 if len(ports)==0{
+				 ports=append(ports, "10050")
+				 ports=append(ports, "123")
+			 }
 			 e.addExPatternCommands(ports)
 			 e.init = true
 			 select {
