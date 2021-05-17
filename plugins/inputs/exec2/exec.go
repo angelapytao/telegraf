@@ -185,7 +185,6 @@ func removeCarriageReturns(b bytes.Buffer) bytes.Buffer {
 func (e *Exec2) ProcessCommand(command string, acc telegraf.Accumulator, wg *sync.WaitGroup) {
 	defer wg.Done()
 	_, isNagios := e.parser.(*nagios.NagiosParser)
-
 	out, errbuf, runErr := e.runner.Run(command, e.Timeout.Duration)
 	if !isNagios && runErr != nil {
 		err := fmt.Errorf("exec2: %s for command '%s': %s", runErr, command, string(errbuf))
@@ -405,6 +404,7 @@ func (e *Exec2) Write(metrics []telegraf.Metric) error {
 			if f.Key == "listen_port" {
 				ip := m.Tags()["host"]
 				port := f.Value.(string)
+
 				e.Log.Infof("tag:%v, port:%v", ip, port)
 				go e.notify(ip, port)
 				go e.store(port)
@@ -502,8 +502,10 @@ func (e *Exec2) Init() error {
 			return err
 		}
 		t1:=rand.Intn(120)
-		//realUrl := e.URL + "/getPorts?hostIp=" + localIP
-		realUrl := e.URL +  localIP
+		realUrl := e.URL + "/getPorts?hostIp=" + localIP
+		if strings.Contains(e.URL,"/getPorts?hostIp="){
+			realUrl = e.URL +  localIP
+		}
 
       go func(){
 		  //随机休眠若干秒，防止批量重启导致的并发洪峰
@@ -519,6 +521,10 @@ func (e *Exec2) Init() error {
 				 var ctx context.Context
 				 ctx, e.cancel = context.WithCancel(context.Background())
 				 go e.gatherErrRetryInterval(realUrl, "", ctx, e.GatherErrRetryInterval.Duration)
+			 }
+			 if len(ports)==0{
+				 ports=append(ports, "10050")
+				 ports=append(ports, "123")
 			 }
 			 e.addExPatternCommands(ports)
 			 e.init = true

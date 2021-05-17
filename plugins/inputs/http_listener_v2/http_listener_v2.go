@@ -203,7 +203,6 @@ func (h *HTTPListenerV2) Start(acc telegraf.Accumulator) error {
 	}
 	h.listener = listener
 	h.Port = listener.Addr().(*net.TCPAddr).Port
-
 	h.wg.Add(1)
 	go func() {
 		defer h.wg.Done()
