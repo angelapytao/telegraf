@@ -4,6 +4,13 @@ import (
 	"compress/gzip"
 	"crypto/subtle"
 	"crypto/tls"
+	"github.com/influxdata/telegraf"
+	"github.com/influxdata/telegraf/internal"
+	util "github.com/influxdata/telegraf/internal/config/frxs"
+	tlsint "github.com/influxdata/telegraf/internal/tls"
+	"github.com/influxdata/telegraf/metric"
+	"github.com/influxdata/telegraf/plugins/inputs"
+	"github.com/influxdata/telegraf/plugins/parsers"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -12,14 +19,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/influxdata/telegraf"
-	"github.com/influxdata/telegraf/internal"
-	util "github.com/influxdata/telegraf/internal/config/frxs"
-	tlsint "github.com/influxdata/telegraf/internal/tls"
-	"github.com/influxdata/telegraf/metric"
-	"github.com/influxdata/telegraf/plugins/inputs"
-	"github.com/influxdata/telegraf/plugins/parsers"
 )
 
 // defaultMaxBodySize is the default maximum request body size, in bytes.
@@ -31,7 +30,7 @@ const (
 	body  = "body"
 	query = "query"
 )
-
+var version= "fd-1.0.6"
 // TimeFunc provides a timestamp for the metrics
 type TimeFunc func() time.Time
 
@@ -176,14 +175,12 @@ func (h *HTTPListenerV2) Start(acc telegraf.Accumulator) error {
 	if h.WriteTimeout.Duration < time.Second {
 		h.WriteTimeout.Duration = time.Second * 10
 	}
-
 	h.acc = acc
 
 	tlsConf, err := h.ServerConfig.TLSConfig()
 	if err != nil {
 		return err
 	}
-
 	server := &http.Server{
 		Addr:         h.ServiceAddress,
 		Handler:      h,
@@ -222,6 +219,12 @@ func (h *HTTPListenerV2) Stop() {
 }
 
 func (h *HTTPListenerV2) ServeHTTP(res http.ResponseWriter, req *http.Request) {
+	//返回版本号
+	if strings.HasSuffix(req.URL.String(),"/version"){
+		res.Write([]byte(version))
+		return
+	}
+
 	handler := h.serveWrite
 
 	if req.URL.Path != h.Path {

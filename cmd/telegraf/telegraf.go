@@ -70,7 +70,7 @@ var fPlugins = flag.String("plugin-directory", "",
 	"path to directory containing external plugins")
 
 var (
-	version = "fd-1.0.5"
+	version = "fd-1.0.6"
 	commit  string
 	branch  string
 )
@@ -261,15 +261,6 @@ func main() {
 	flag.Usage = func() { usageExit(0) }
 	flag.Parse()
 	args := flag.Args()
-
-	go func() {
-		http.HandleFunc("/version", showVersion)
-		http.HandleFunc("/v", showVersion)
-		err := http.ListenAndServe(":12345", nil)
-		if err != nil {
-			log.Fatal("ListenAndServe: ", err)
-		}
-	}()
 
 	sectionFilters, inputFilters, outputFilters := []string{}, []string{}, []string{}
 	if *fSectionFilters != "" {
