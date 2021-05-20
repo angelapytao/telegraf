@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"github.com/influxdata/telegraf/plugins/common/store"
 	"io"
 	"io/ioutil"
 	"log"
@@ -31,11 +32,12 @@ type Line struct {
 	Time   time.Time
 	Err    error // Error from tail
 	Offset int64
+	FileDelCount int64
 }
 
 // NewLine returns a Line with present time.
 func NewLine(text string) *Line {
-	return &Line{text, time.Now(), nil, 0}
+	return &Line{text, time.Now(), nil, 0,0}
 }
 
 // SeekInfo represents arguments to `os.Seek`
@@ -92,6 +94,8 @@ type Tail struct {
 	lk sync.Mutex
 
 	LastOffset int64
+
+	FileDelCount int64 //日志文件删除或覆盖次数
 }
 
 var (
@@ -288,7 +292,7 @@ func (tail *Tail) tailFileSync() {
 				// file when rate limit is reached.
 				msg := ("Too much log activity; waiting a second " +
 					"before resuming tailing")
-				tail.Lines <- &Line{msg, time.Now(), errors.New(msg), offset}
+				tail.Lines <- &Line{msg, time.Now(), errors.New(msg), offset,tail.FileDelCount}
 				select {
 				case <-time.After(time.Second):
 				case <-tail.Dying():
@@ -332,6 +336,7 @@ func (tail *Tail) tailFileSync() {
 				tail.Kill(err)
 				return
 			}
+			offset=tail.LastOffset
 		} else {
 			// non-EOF error
 			tail.Killf("Error reading %s: %s", tail.Filename, err)
@@ -379,11 +384,15 @@ func (tail *Tail) waitForChanges() error {
 		return nil
 	case <-tail.changes.Deleted:
 		tail.changes = nil
+		tail.FileDelCount++
 		if tail.ReOpen {
 			tail.LastOffset=0//文件删除后重新打开，将offset设置为0（文件开头）
 			// XXX: we must not log from a library.
 			tail.Logger.Printf("Re-opening moved/deleted file %s ...", tail.Filename)
 			if err := tail.reopen(); err != nil {
+				return err
+			}
+			if err:=store.SaveOffset(tail.Filename,0,tail.FileDelCount); err != nil {
 				return err
 			}
 			tail.Logger.Printf("Successfully reopened %s", tail.Filename)
@@ -395,9 +404,13 @@ func (tail *Tail) waitForChanges() error {
 		}
 	case <-tail.changes.Truncated:
 		tail.LastOffset=0//文件Truncated后重新打开，将offset设置为0（文件开头）
+		tail.FileDelCount++
 		// Always reopen truncated files (Follow is true)
 		tail.Logger.Printf("Re-opening truncated file %s ...", tail.Filename)
 		if err := tail.reopen(); err != nil {
+			return err
+		}
+		if err:=store.SaveOffset(tail.Filename,0,tail.FileDelCount); err != nil {
 			return err
 		}
 		tail.Logger.Printf("Successfully reopened truncated %s", tail.Filename)
@@ -408,6 +421,7 @@ func (tail *Tail) waitForChanges() error {
 	}
 	panic("unreachable")
 }
+
 
 func (tail *Tail) openReader() {
 	tail.lk.Lock()
@@ -452,7 +466,7 @@ func (tail *Tail) sendLine(line string, offset int64) bool {
 	}
 
 	for _, line := range lines {
-		tail.Lines <- &Line{line, now, nil, offset}
+		tail.Lines <- &Line{line, now, nil, offset,tail.FileDelCount}
 	}
 
 	if tail.Config.RateLimiter != nil {

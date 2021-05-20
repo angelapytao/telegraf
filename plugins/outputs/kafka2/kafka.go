@@ -48,7 +48,7 @@ type (
 		LogBrokers []LogBrokers `toml:"log_brokers"`
 
 		Version string `toml:"version"`
-
+		ShowSend bool `toml:"show_send"`
 		// Legacy TLS config options
 		// TLS client certificate
 		Certificate string
@@ -501,6 +501,12 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 		}
 		offset := _offset.(int64)
 
+		_fileDelCount, ok :=metric.GetField("fileDelCount")
+		if !ok {
+			return errors.New("fileDelCount为空！")
+		}
+		fileDelCount := _fileDelCount.(int64)
+
 		topic := ""
 		var hosts []string
 		logName := _logName.(string)
@@ -549,8 +555,9 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 			return fmt.Errorf("%s,%s,%v 连接kafka失败", logName, topic, hosts)
 		}
 		_, _, prodErr := producer.SendMessage(m)
-
-		fmt.Println("send------------", string(buf), offset)
+		if k.ShowSend {
+			fmt.Println("send------------", string(buf), offset,fileDelCount)
+		}
 		if prodErr != nil {
 			errP := prodErr.(*sarama.ProducerError)
 			if errP.Err == sarama.ErrMessageSizeTooLarge {
@@ -563,13 +570,8 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 			}
 			return errP
 		}
-		logOffsetDto, ok := store.MapLogOffset[fileName]
-		if !ok {
-			logOffsetDto = new(store.LogOffset)
-			logOffsetDto.FileName = fileName + ".offset"
-			store.MapLogOffset[fileName] = logOffsetDto
-		}
-		err = logOffsetDto.Set(offset)
+
+		err=store.SaveOffset(fileName,offset,fileDelCount)
 		if err != nil {
 			return err
 		}

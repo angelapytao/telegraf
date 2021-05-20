@@ -342,17 +342,21 @@ func (t *Log) watchNewFiles(ch chan string) {
 				t.Log.Errorf("Glob %q failed to compile: %s", filepath, err.Error())
 			}
 			for _, file := range g.Match() {
+				//
 				if _, ok := t.tailers[file]; ok {
 					// we're already tailing this file
 					continue
 				}
 				//t.regexpConfig[file] = getRegItems(file, t.Regexp)
 				regItem :=getRegItems(file, t.Regexp)
+				if len(regItem)==0{
+					continue
+				}
 				t.regexpConfig.Store(file,regItem)
 				ch <- file
 			}
 		}
-		if time.Now().Minute() == 59 && time.Now().Second() >= 30 {
+		if time.Now().Minute() == 59 && time.Now().Second() >= 40 {
 			sleeptime = 1
 		} else {
 			sleeptime = 10
@@ -361,32 +365,7 @@ func (t *Log) watchNewFiles(ch chan string) {
 	}
 }
 
-//// ParseLine parses a line of text.
-//func parseLine(parser parsers.Parser, line string, firstLine bool) ([]telegraf.Metric, error) {
-//	switch parser.(type) {
-//	case *csv.Parser:
-//		// The csv parser parses headers in Parse and skips them in ParseLine.
-//		// As a temporary solution call Parse only when getting the first
-//		// line from the file.
-//		if firstLine {
-//			return parser.Parse([]byte(line))
-//		}
-//
-//		m, err := parser.ParseLine(line)
-//		if err != nil {
-//			return nil, err
-//		}
-//
-//		if m != nil {
-//			return []telegraf.Metric{m}, nil
-//		}
-//		return []telegraf.Metric{}, nil
-//	default:
-//		return parser.Parse([]byte(line))
-//	}
-//}
-
-func parseLine2(fileName, metricName, logName string, text string, offset int64) ([]telegraf.Metric, error) {
+func parseLine2(fileName, metricName, logName string, text string, offset,fileDelCount int64) ([]telegraf.Metric, error) {
 	metrics := make([]telegraf.Metric, 0)
 
 	_flags:=""
@@ -404,6 +383,7 @@ func parseLine2(fileName, metricName, logName string, text string, offset int64)
 		},
 		"message":text,
 		"log_name":logName,
+		"fileDelCount":fileDelCount,
 	}
 
 	m, err := metric.New(metricName, map[string]string{}, fields, time.Now(),telegraf.Event)
@@ -461,6 +441,7 @@ func (t *Log) receiver(tailer *Tail) {
 		}
 
 		var text string
+		var fileDelCount int64
 
 		if line != nil {
 			// Fix up files with Windows line endings.
@@ -470,6 +451,7 @@ func (t *Log) receiver(tailer *Tail) {
 					continue
 				}
 			}
+			fileDelCount=line.FileDelCount
 		}
 		if line == nil || !channelOpen || !tailerOpen {
 			if text += t.multiline.Flush(&buffer); text == "" {
@@ -498,7 +480,7 @@ func (t *Log) receiver(tailer *Tail) {
 			continue
 		}
 
-		metrics, err := parseLine2(tailer.Filename, "log", logName, text, _offset)
+		metrics, err := parseLine2(tailer.Filename, "log", logName, text, _offset,fileDelCount)
 		if err != nil {
 			t.Log.Errorf("Malformed log line in %q: [%q]: %s",
 				tailer.Filename, text, err.Error())
