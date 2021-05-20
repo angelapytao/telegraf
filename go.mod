@@ -39,6 +39,7 @@ require (
 	github.com/vjeantet/grok v1.0.1
 	go.uber.org/multierr v1.6.0 // indirect
 	go.uber.org/zap v1.16.0
+	golang.org/x/oauth2 v0.0.0-20210514164344-f6687ab2804c
 	golang.org/x/sys v0.0.0-20210421221651-33663a62ff08
 	golang.org/x/text v0.3.6
 	gopkg.in/fsnotify.v1 v1.4.7 // indirect

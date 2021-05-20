@@ -20,6 +20,7 @@ type Script struct {
 	MaxCachedSessions int                    `toml:"max_cached_sessions" validate:"min=0"` // Max. number of cached VM sessions.
 
 	init      bool
+	onChange  bool
 	processor processors.Processor
 }
 
