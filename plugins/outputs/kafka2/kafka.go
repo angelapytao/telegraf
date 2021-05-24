@@ -48,6 +48,7 @@ type (
 
 		Version string `toml:"version"`
 		ShowSend bool `toml:"show_send"`
+		Topic string `toml:"topic"`
 		Brokers              []string `toml:"brokers"`                  //kafka服务器列表
 		// Legacy TLS config options
 		// TLS client certificate
@@ -508,7 +509,8 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 		if ok {
 			topic = _topic.(string)
 			if topic == "" {
-				return errors.New("metric中的topic字段为空！")
+				//return errors.New("metric中的topic字段为空！")
+				topic=k.Topic
 			}
 			_hosts, ok := metric.GetField("hosts")
 			if ok {
@@ -516,7 +518,8 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 			}
 		} else {
 			if topic == "" {
-				return errors.New("metric中缺少topic字段！")
+				//return errors.New("metric中缺少topic字段！")
+				topic=k.Topic
 			}
 		}
 
@@ -547,9 +550,6 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 			return fmt.Errorf("%v 连接kafka失败",  hosts)
 		}
 		_, _, prodErr := producer.SendMessage(m)
-		if k.ShowSend {
-			fmt.Println("send------------", string(buf), offset,fileDelCount)
-		}
 		if prodErr != nil {
 			errP := prodErr.(*sarama.ProducerError)
 			if errP.Err == sarama.ErrMessageSizeTooLarge {
@@ -562,7 +562,9 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 			}
 			return errP
 		}
-
+		if k.ShowSend {
+			fmt.Println("send------------",topic,hosts, string(buf), offset,fileDelCount)
+		}
 		err=store.SaveOffset(fileName,offset,fileDelCount)
 		if err != nil {
 			return err
