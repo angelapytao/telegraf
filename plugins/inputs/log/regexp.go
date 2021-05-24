@@ -37,25 +37,22 @@ func (reg *RegexpConfig) GetRegItems(filename string) *RegexpItem {
 }
 
 
-func  getRegItems(filename string,regexpConfig []RegexpConfig) []RegexpItem {
-	var arr []RegexpItem
-	for _,r :=range regexpConfig{
-		reg:=r.GetRegItems(filename)
-		if reg!=nil{
-			arr=append(arr,*reg)
-		}
-	}
-	return  arr
-}
+//func getLogName(text string,regItems []RegexpItem )string{
+//	logName:=""
+//	for _,r:=range regItems{
+//		reg:=regexp.MustCompile(r.Reg)
+//		if reg.MatchString(text){
+//			logName=r.Name
+//			break
+//		}
+//	}
+//	return  logName
+//}
 
-func getLogName(text string,regItems []RegexpItem )string{
-	logName:=""
-	for _,r:=range regItems{
-		reg:=regexp.MustCompile(r.Reg)
-		if reg.MatchString(text){
-			logName=r.Name
-			break
-		}
+func isMatch(text string,regxp string )bool{
+	reg:=regexp.MustCompile(regxp)
+	if reg.MatchString(text){
+		return true
 	}
-	return  logName
+	return  false
 }

@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"log"
 	"strings"
@@ -45,10 +46,9 @@ type (
 		MaxRetry         int         `toml:"max_retry"`
 		MaxMessageBytes  int         `toml:"max_message_bytes"`
 
-		LogBrokers []LogBrokers `toml:"log_brokers"`
-
 		Version string `toml:"version"`
 		ShowSend bool `toml:"show_send"`
+		Brokers              []string `toml:"brokers"`                  //kafka服务器列表
 		// Legacy TLS config options
 		// TLS client certificate
 		Certificate string
@@ -70,7 +70,7 @@ type (
 
 		producerFunc func(addrs []string, config *sarama.Config) (sarama.SyncProducer, error)
 		//producer   sarama.SyncProducer
-		producers map[string]sarama.SyncProducer
+		producers sync.Map // map[string]sarama.SyncProducer
 		// loker sync.Mutex
 		serializer serializers.Serializer
 		//*sarama.Config
@@ -80,13 +80,6 @@ type (
 		Method    string   `toml:"method"`
 		Keys      []string `toml:"keys"`
 		Separator string   `toml:"separator"`
-	}
-	LogBrokers struct {
-		Name                 string   `toml:"name"`                     //日志名称
-		Brokers              []string `toml:"brokers"`                  //kafka服务器列表
-		TopicFilterReg       string   `toml:"topic_filter_reg"`         //从message中提取topic的正则表达式
-		TopicFilterNo        int      `toml:"topic_filter_no"`          //根据正则表达式提取了多个结果，第几个才是最终的topic
-		TopicFilterDelPreSuf bool     `toml:"topic_filter_del_pre_suf"` //是否去掉提取的topic的首尾字符
 	}
 )
 
@@ -427,15 +420,19 @@ func (k *Kafka2) Connect() error {
 
 func (k *Kafka2) Close() error {
 	//return k.producer.Close()
-	//k.loker.Lock()
-	//defer  k.loker.Unlock()
 
-	for _, p := range k.producers {
-		err := p.Close()
-		if err != nil {
-			return err
-		}
-	}
+	k.producers.Range(
+		func(k ,v interface{})bool{
+			p:=v.(sarama.SyncProducer)
+			err := p.Close()
+			if err != nil {
+				fmt.Println(err)
+				return false
+			}
+			return true
+		},
+	 )
+
 	return nil
 }
 
@@ -475,10 +472,7 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 			k.Log.Debugf("Could not serialize metric: %v", err)
 			continue
 		}
-		_logName, ok := metric.GetField("log_name")
-		if !ok {
-			return errors.New("log_name为空！")
-		}
+
 		_logDto, ok := metric.GetField("log")
 		if !ok {
 			return errors.New("log为空！")
@@ -509,7 +503,7 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 
 		topic := ""
 		var hosts []string
-		logName := _logName.(string)
+
 		_topic, ok := metric.GetField("topic")
 		if ok {
 			topic = _topic.(string)
@@ -521,13 +515,8 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 				hosts = _hosts.([]string)
 			}
 		} else {
-			//如果metric中缺少topic字段，则根据配置文件从message中提取
-			topic, err = k.fetchTopic(logName, string(buf))
-			if err != nil {
-				return errors.New("metric中缺少topic字段！" + err.Error())
-			}
 			if topic == "" {
-				return errors.New("metric中缺少topic字段，并且在message中提取topic失败！")
+				return errors.New("metric中缺少topic字段！")
 			}
 		}
 
@@ -549,10 +538,13 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 		if key != "" {
 			m.Key = sarama.StringEncoder(key)
 		}
-
-		producer := k.getProducer(logName, topic, hosts)
+		//如果metric中没有传hosts字段，默认从配置读取
+		if len(hosts) ==0 {
+			hosts=k.Brokers
+		}
+		producer := k.getProducer(hosts)
 		if producer == nil {
-			return fmt.Errorf("%s,%s,%v 连接kafka失败", logName, topic, hosts)
+			return fmt.Errorf("%v 连接kafka失败",  hosts)
 		}
 		_, _, prodErr := producer.SendMessage(m)
 		if k.ShowSend {
@@ -580,58 +572,32 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 }
 
 func (k *Kafka2) createProducer() error {
-	k.producers = make(map[string]sarama.SyncProducer)
-	//k.loker.Lock()
-	//defer k.loker.Unlock()
-
-	for _, v := range k.LogBrokers {
-		producer, err := k.producerFunc(v.Brokers, k.config)
-		if err != nil {
-			return err
-		}
-		k.producers[v.Name] = producer
+	key := strings.Join(k.Brokers, "_")
+	producer, err := k.producerFunc(k.Brokers, k.config)
+	if err != nil {
+		return err
 	}
+	k.producers.Store(key,producer)
 
 	return nil
 }
 
-func (k *Kafka2) fetchTopic(name, msg string) (string, error) {
-	b := new(LogBrokers)
-	for _, l := range k.LogBrokers {
-		if l.Name == name {
-			b = &l
-			break
-		}
-	}
-	if b == nil {
-		return "", errors.New(name + "没有匹配的配置节点，请检查[[outputs.kafka2.log_brokers]]")
-	}
-	 return b.Name, nil
-}
 
-func (k *Kafka2) getProducer(key, topic string, hosts []string) sarama.SyncProducer {
-	//k.loker.Lock()
-	//defer k.loker.Unlock()
-	if topic != "" && len(hosts) > 0 {
-		key = strings.Join(hosts, "") + "_" + topic
-		p, isok := k.producers[key]
-		if isok {
-			return p
-		}
-		producer, err := k.producerFunc(hosts, k.config)
-		if err != nil {
-			fmt.Println("连接kafka出错", hosts, topic)
-			return nil
-		}
-		k.producers[key] = producer
-		return producer
-	}
+func (k *Kafka2) getProducer(hosts []string) sarama.SyncProducer {
 
-	p, isok := k.producers[key]
-	if !isok {
+	key := strings.Join(hosts, "_")
+	p, isok :=k.producers.Load(key)
+	if isok {
+		return p.(sarama.SyncProducer)
+	}
+	producer, err := k.producerFunc(hosts, k.config)
+	if err != nil {
+		fmt.Println("连接kafka出错", hosts)
 		return nil
 	}
-	return p
+	k.producers.Store(key,producer)
+
+	return producer
 }
 
 func init() {

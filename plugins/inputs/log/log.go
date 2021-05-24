@@ -50,7 +50,8 @@ type Log struct {
 	MaxUndeliveredLines int            `toml:"max_undelivered_lines"`
 	CharacterEncoding   string         `toml:"character_encoding"`
 	PathTag             string         `toml:"path_tag"`
-	Regexp              []RegexpConfig `toml:"regexp"`
+	//Regexp              []RegexpConfig `toml:"regexp"`
+	Regexp string  `toml:"regexp"`
 
 	Log        telegraf.Logger `toml:"-"`
 	tailers    map[string]*Tail
@@ -67,7 +68,7 @@ type Log struct {
 	cancel       context.CancelFunc
 	sem          semaphore
 	decoder      *encoding.Decoder
-	regexpConfig sync.Map //[string][]RegexpItem
+	//regexpConfig sync.Map //[string][]RegexpItem
 }
 
 func NewLog() *Log {
@@ -180,10 +181,7 @@ func (t *Log) Start(acc telegraf.Accumulator) error {
 	t.acc = acc.WithTracking(t.MaxUndeliveredLines)
 
 	t.ctx, t.cancel = context.WithCancel(context.Background())
-	err := t.initReg()
-	if err != nil {
-		return err
-	}
+
 	t.wg.Add(1)
 	go func() {
 		defer t.wg.Done()
@@ -197,7 +195,7 @@ func (t *Log) Start(acc telegraf.Accumulator) error {
 		}
 	}()
 
-	//var err error
+	var err error
 	t.multiline, err = t.MultilineConfig.NewMultiline()
 
 	if err != nil {
@@ -247,22 +245,6 @@ func (t *Log) tailNewFiles(fromBeginning bool) error {
 				Whence: 0, //SEEK_SET int = 0 ,seek relative to the origin of the file
 				Offset: offset,
 			}
-
-			//if !t.Pipe && !fromBeginning {
-			//if offset, ok := t.offsets[file]; ok {
-			//	t.Log.Debugf("Using offset %d for %q", offset, file)
-			//if offset==0{
-			//	seek = &SeekInfo{
-			//		Whence: 0,//SEEK_SET int = 0 ,seek relative to the origin of the file
-			//		Offset: offset,
-			//	}
-			//} else {
-			//	seek = &SeekInfo{
-			//		Whence: 2, //SEEK_END int = 2 ,seek relative to the end
-			//		Offset: 0,
-			//	}
-			//}
-			//}
 
 			tailer, err := TailFile(file,
 				Config{
@@ -314,23 +296,20 @@ func (t *Log) tailNewFiles(fromBeginning bool) error {
 	return nil
 }
 
-//根据配置的正则表达式初始化
-func (t *Log) initReg() error {
-
-	for _, filepath := range t.Files {
-		g, err := globpath.Compile(filepath)
-		if err != nil {
-			t.Log.Errorf("Glob %q failed to compile: %s", filepath, err.Error())
-		}
-		for _, file := range g.Match() {
-
-			//t.regexpConfig[file] = getRegItems(file, t.Regexp)
-			regoitem:=getRegItems(file, t.Regexp)
-			t.regexpConfig.Store(file,regoitem)
-		}
-	}
-	return nil
-}
+////根据配置的正则表达式初始化
+//func (t *Log) initReg() error {
+//
+//	for _, filepath := range t.Files {
+//		g, err := globpath.Compile(filepath)
+//		if err != nil {
+//			t.Log.Errorf("Glob %q failed to compile: %s", filepath, err.Error())
+//		}
+//		for _, file := range g.Match() {
+//			t.regexpConfig.Store(file,t.Regexp)
+//		}
+//	}
+//	return nil
+//}
 
 //监控新生成的日志文件
 func (t *Log) watchNewFiles(ch chan string) {
@@ -342,17 +321,11 @@ func (t *Log) watchNewFiles(ch chan string) {
 				t.Log.Errorf("Glob %q failed to compile: %s", filepath, err.Error())
 			}
 			for _, file := range g.Match() {
-				//
 				if _, ok := t.tailers[file]; ok {
 					// we're already tailing this file
 					continue
 				}
-				//t.regexpConfig[file] = getRegItems(file, t.Regexp)
-				regItem :=getRegItems(file, t.Regexp)
-				if len(regItem)==0{
-					continue
-				}
-				t.regexpConfig.Store(file,regItem)
+				//t.regexpConfig.Store(file,t.Regexp)
 				ch <- file
 			}
 		}
@@ -365,7 +338,7 @@ func (t *Log) watchNewFiles(ch chan string) {
 	}
 }
 
-func parseLine2(fileName, metricName, logName string, text string, offset,fileDelCount int64) ([]telegraf.Metric, error) {
+func parseLine2(fileName, metricName,  text string, offset,fileDelCount int64) ([]telegraf.Metric, error) {
 	metrics := make([]telegraf.Metric, 0)
 
 	_flags:=""
@@ -382,7 +355,6 @@ func parseLine2(fileName, metricName, logName string, text string, offset,fileDe
 			"flags":  []string{_flags},
 		},
 		"message":text,
-		"log_name":logName,
 		"fileDelCount":fileDelCount,
 	}
 
@@ -469,18 +441,12 @@ func (t *Log) receiver(tailer *Tail) {
 			t.Log.Errorf("Tailing %q: %s", tailer.Filename, line.Err.Error())
 			continue
 		}
-		regItem,ok:=t.regexpConfig.Load(tailer.Filename)
-		if !ok{
-			fmt.Println(tailer.Filename, "无匹配的正则表达式!")
-			continue
-		}
-		logName := getLogName(text, regItem.([]RegexpItem))
-		if logName == "" {
-			fmt.Println(tailer.Filename, "日志行无匹配的正则表达式:", text)
+
+		if !isMatch(text,t.Regexp){
 			continue
 		}
 
-		metrics, err := parseLine2(tailer.Filename, "log", logName, text, _offset,fileDelCount)
+		metrics, err := parseLine2(tailer.Filename, "log",  text, _offset,fileDelCount)
 		if err != nil {
 			t.Log.Errorf("Malformed log line in %q: [%q]: %s",
 				tailer.Filename, text, err.Error())
