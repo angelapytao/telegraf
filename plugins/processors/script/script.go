@@ -22,12 +22,26 @@ type Script struct {
 	init      bool
 	onChange  bool
 	processor processors.Processor
+
+	HttpInputFieldKey string `toml:"http_input_field_key"` // http input generate field name
+	HttpInputTagKey   string `toml:"http_input_tag_key"`   // http input generate field name
 }
 
 func (s *Script) Apply(in ...telegraf.Metric) []telegraf.Metric {
 	s.initOnce()
 	for _, metric := range in {
-		s.processor.Run(metric)
+		// fmt.Printf("Script Apply: %v \n", metric)
+		// fmt.Printf("Script Apply-MName:%s, Fields: %v, Tags: %v\n", metric.Name(), metric.Fields(), metric.Tags())
+
+		if field, ok := metric.GetField(s.HttpInputFieldKey); ok {
+			tag, _ := metric.GetField(s.HttpInputTagKey)
+			s.reLoadJavaScript(field.(string), tag.(string))
+		}
+
+		if s.processor != nil {
+			// fmt.Printf("Script Apply processorId: %v\n", s.processor.String())
+			s.processor.Run(metric)
+		}
 	}
 	return in
 }
@@ -43,7 +57,7 @@ func (s *Script) Description() string {
 }
 
 func (s *Script) initOnce() {
-	if s.init {
+	if s.init || (s.HttpInputFieldKey != "" && s.Source == "") {
 		return
 	}
 	config := &javascript.Config{
@@ -63,6 +77,25 @@ func (s *Script) initOnce() {
 
 	s.processor = p
 	s.init = true
+}
+
+func (s *Script) reLoadJavaScript(source, tag string) {
+	config := &javascript.Config{
+		Tag:               tag,
+		Source:            source,
+		File:              s.File,
+		Files:             s.Files,
+		Params:            s.Params,
+		Timeout:           s.Timeout,
+		TagOnException:    s.TagOnException,
+		MaxCachedSessions: 4,
+	}
+	p, err := javascript.New(config)
+	if err != nil {
+		fmt.Printf("reInit js vm err: %v", err)
+	}
+
+	s.processor = p
 }
 
 func init() {

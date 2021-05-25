@@ -42,7 +42,7 @@ func New(c *Config) (processors.Processor, error) {
 		sessionPool: pool,
 		sourceProg:  prog,
 		sourceFile:  sourceFile,
-		Tag:         "JsProcessor",
+		Tag:         c.Tag,
 	}, nil
 }
 

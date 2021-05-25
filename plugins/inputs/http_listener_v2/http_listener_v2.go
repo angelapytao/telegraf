@@ -110,11 +110,6 @@ const sampleConfig = `
   ## more about them here:
   ## https://github.com/influxdata/telegraf/blob/master/docs/DATA_FORMATS_INPUT.md
   data_format = "influx"
-
-  ## 
-  urls = [
-    "http://localhost/metrics"
-  ]
 `
 
 func (h *HTTPListenerV2) SampleConfig() string {
@@ -159,28 +154,9 @@ func (h *HTTPListenerV2) postStart() {
 		fields := make(map[string]interface{}, 1)
 		fields["listen_port"] = h.newPort
 		metric, _ := metric.New("http_listener_v2", nil, fields, time.Now().UTC())
-
 		h.acc.AddMetric(metric)
 	}
 }
-
-// // notify insight console that http_listener_v2 listen port had changed
-// func (h *HTTPListenerV2) notify(ip, port string) {
-// 	body := fmt.Sprintf(`{
-// 		"ip": "%s",
-// 		"port": "%s"
-// 	}`, ip, port)
-
-// 	realUrl := e.URL + "/update"
-// 	err := e.doHttpPost(realUrl, body)
-// 	if err != nil {
-// 		e.Log.Errorf("Notify Console Err: %v", err)
-
-// 		var ctx context.Context
-// 		ctx, e.cancel = context.WithCancel(context.Background())
-// 		go e.gatherErrRetryInterval(realUrl, body, ctx, e.GatherErrRetryInterval.Duration)
-// 	}
-// }
 
 // Start starts the http listener service.
 func (h *HTTPListenerV2) Start(acc telegraf.Accumulator) error {

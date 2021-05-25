@@ -38,6 +38,8 @@ type HTTP struct {
 	// The parser will automatically be set by Telegraf core code because
 	// this plugin implements the ParserInput interface (i.e. the SetParser method)
 	parser parsers.Parser
+	// if the url fetch correctly, then the url won't gather anymore.
+	okUrls map[string]bool
 }
 
 var sampleConfig = `
@@ -111,6 +113,13 @@ func (h *HTTP) Init() error {
 	if len(h.SuccessStatusCodes) == 0 {
 		h.SuccessStatusCodes = []int{200}
 	}
+
+	// init okUrls
+	okUrls := make(map[string]bool, len(h.URLs))
+	for _, u := range h.URLs {
+		okUrls[u] = false
+	}
+	h.okUrls = okUrls
 	return nil
 }
 
@@ -118,14 +127,18 @@ func (h *HTTP) Init() error {
 // gathers. This is called every "interval"
 func (h *HTTP) Gather(acc telegraf.Accumulator) error {
 	var wg sync.WaitGroup
-	for _, u := range h.URLs {
-		wg.Add(1)
-		go func(url string) {
-			defer wg.Done()
-			if err := h.gatherURL(acc, url); err != nil {
-				acc.AddError(fmt.Errorf("[url=%s]: %s", url, err))
-			}
-		}(u)
+	for url, ok := range h.okUrls {
+		if !ok {
+			wg.Add(1)
+			go func(url string) {
+				defer wg.Done()
+				if err := h.gatherURL(acc, url); err != nil {
+					acc.AddError(fmt.Errorf("[url=%s]: %s", url, err))
+				} else {
+					h.okUrls[url] = true
+				}
+			}(url)
+		}
 	}
 
 	wg.Wait()
@@ -201,7 +214,6 @@ func (h *HTTP) gatherURL(
 	if err != nil {
 		return err
 	}
-
 	metrics, err := h.parser.Parse(b)
 	if err != nil {
 		return err
