@@ -551,15 +551,25 @@ func (k *Kafka2) Write(metrics []telegraf.Metric) error {
 		}
 		_, _, prodErr := producer.SendMessage(m)
 		if prodErr != nil {
-			errP := prodErr.(*sarama.ProducerError)
-			if errP.Err == sarama.ErrMessageSizeTooLarge {
-				k.Log.Error("Message too large, consider increasing `max_message_bytes`; dropping batch")
-				return nil
-			}
-			if errP.Err == sarama.ErrInvalidTimestamp {
-				k.Log.Error("The timestamp of the message is out of acceptable range, consider increasing broker `message.timestamp.difference.max.ms`; dropping batch")
-				return nil
-			}
+			errP:=func(err error) error{
+				defer func() {
+					if r := recover(); r != nil {
+						return
+					}
+				}()
+
+				errP := err.(*sarama.ProducerError)
+				if errP.Err == sarama.ErrMessageSizeTooLarge {
+					k.Log.Error("Message too large, consider increasing `max_message_bytes`; dropping batch")
+					return nil
+				}
+				if errP.Err == sarama.ErrInvalidTimestamp {
+					k.Log.Error("The timestamp of the message is out of acceptable range, consider increasing broker `message.timestamp.difference.max.ms`; dropping batch")
+					return nil
+				}
+				return err
+			}(prodErr)
+
 			return errP
 		}
 		if k.ShowSend {

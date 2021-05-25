@@ -249,7 +249,7 @@ func formatFullVersion() string {
 		}
 		if commit == "" {
 			commit = "unknown"
-		}
+		} 
 		git := fmt.Sprintf("(git: %s %s)", branch, commit)
 		parts = append(parts, git)
 	}
