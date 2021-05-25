@@ -237,7 +237,7 @@ func (t *Log) tailNewFiles(fromBeginning bool) error {
 				t.Log.Error("获取文件"+logOffset.FileName+" 偏移量出错", err.Error())
 				return
 			}
-			store.MapLogOffset[logOffset.FileName] = logOffset
+			store.MapLogOffset.Store(logOffset.FileName,logOffset)
 
 			var seek *SeekInfo
 

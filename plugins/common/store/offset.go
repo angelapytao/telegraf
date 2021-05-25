@@ -19,7 +19,7 @@ type LogOffset struct {
 
 const MaxErrOffsetCount = 2000
 
-var MapLogOffset=make(map[string]*LogOffset)
+var MapLogOffset sync.Map  //make(map[string]*LogOffset)
 
 func (s *LogOffset) Get() (int64, error) {
 	s.locker.Lock()
@@ -120,11 +120,13 @@ func (s *LogOffset) Close() error {
 }
 
 func SaveOffset(fileName string,offset,count int64) error{
-	logOffsetDto, ok := MapLogOffset[fileName]
+	_logOffsetDto,ok:=MapLogOffset.Load(fileName)
+	logOffsetDto := LogOffset{}
 	if !ok {
-		logOffsetDto = new(LogOffset)
 		logOffsetDto.FileName = fileName + ".offset"
-		MapLogOffset[fileName] = logOffsetDto
+		MapLogOffset.Store(fileName, logOffsetDto)
+	}else{
+		logOffsetDto=_logOffsetDto.(LogOffset)
 	}
 	err := logOffsetDto.Set(offset,count)
     return err
