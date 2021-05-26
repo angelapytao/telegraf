@@ -130,8 +130,8 @@ func (m *metric) FieldList() []*telegraf.Field {
 	if m.tp == telegraf.Event {
 		var fields map[string]interface{} = m.events
 		i := 0
-		if len(fields)>0 {
-			m.fields= make([]*telegraf.Field,len(fields))
+		if len(fields) > 0 {
+			m.fields = make([]*telegraf.Field, len(fields))
 			for k, field := range fields {
 				m.fields[i] = &telegraf.Field{Key: k, Value: field}
 				i++
@@ -270,7 +270,6 @@ func (m *metric) Copy() telegraf.Metric {
 	m2 := &metric{
 		name:      m.name,
 		tags:      make([]*telegraf.Tag, len(m.tags)),
-		fields:    make([]*telegraf.Field, len(m.fields)),
 		tm:        m.tm,
 		tp:        m.tp,
 		aggregate: m.aggregate,
@@ -280,9 +279,15 @@ func (m *metric) Copy() telegraf.Metric {
 		m2.tags[i] = &telegraf.Tag{Key: tag.Key, Value: tag.Value}
 	}
 
-	for i, field := range m.fields {
-		m2.fields[i] = &telegraf.Field{Key: field.Key, Value: field.Value}
+	if m.tp == telegraf.Event { // event type has no fields
+		m2.events = m.events
+	} else {
+		m2.fields = make([]*telegraf.Field, len(m.fields))
+		for i, field := range m.fields {
+			m2.fields[i] = &telegraf.Field{Key: field.Key, Value: field.Value}
+		}
 	}
+
 	return m2
 }
 

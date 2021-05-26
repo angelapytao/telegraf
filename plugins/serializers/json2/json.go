@@ -48,23 +48,13 @@ func (s *serializer) SerializeBatch(metrics []telegraf.Metric) ([]byte, error) {
 }
 
 func (s *serializer) createObject(metric telegraf.Metric) map[string]interface{} {
-	m := make(map[string]interface{})//, 4)
+	m := make(map[string]interface{}) //, 4)
 	m["tags"] = metric.Tags()
 	//m["fields"] = metric.Fields()
-	fields:= metric.Fields()
-	for k,v:=range fields{
-		////定制Log字段反序列化
-		//if  k=="log"{
-		//	logDto:=new(store.LogDto)
-		//	err:=jsoniter.Unmarshal([]byte(v.(string)),&logDto)
-		//	if err==nil{
-		//		m[k] =logDto
-		//		continue
-		//	}
-		//}
-		m[k] =v
+	fields := metric.Fields()
+	for k, v := range fields {
+		m[k] = v
 	}
-
 
 	m["name"] = metric.Name()
 	m["timestamp"] = metric.Time().UnixNano() / int64(s.TimestampUnits)

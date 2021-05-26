@@ -30,16 +30,12 @@ type Script struct {
 func (s *Script) Apply(in ...telegraf.Metric) []telegraf.Metric {
 	s.initOnce()
 	for _, metric := range in {
-		// fmt.Printf("Script Apply: %v \n", metric)
-		// fmt.Printf("Script Apply-MName:%s, Fields: %v, Tags: %v\n", metric.Name(), metric.Fields(), metric.Tags())
-
 		if field, ok := metric.GetField(s.HttpInputFieldKey); ok {
 			tag, _ := metric.GetField(s.HttpInputTagKey)
 			s.reLoadJavaScript(field.(string), tag.(string))
 		}
 
 		if s.processor != nil {
-			// fmt.Printf("Script Apply processorId: %v\n", s.processor.String())
 			s.processor.Run(metric)
 		}
 	}
